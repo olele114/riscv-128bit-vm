@@ -136,9 +136,115 @@ impl Memory {
         panic!("Memory access violation: {:x}", addr);
     }
 
+    pub fn write_8(&mut self, addr: Address128, value: Word8) {
+        self.check_permissions(addr, MemoryPermissions::Write);
+        let region = self.find_region_mut(addr);
+        if let Some(region) = region {
+            let offset = addr - region.start;
+            region.data[offset as usize] = value;
+            return;
+        }
+        panic!("Memory access violation: {:x}", addr);
+    }
+
+    pub fn write_16(&mut self, addr: Address128, value: Word16) {
+        self.check_permissions(addr, MemoryPermissions::Write);
+        let region = self.find_region_mut(addr);
+        if let Some(region) = region {
+            let offset = addr - region.start;
+            region.data[offset as usize] = (value & 0xFF) as Word8;
+            region.data[offset as usize + 1] = ((value >> 8) & 0xFF) as Word8;
+            return;
+        }
+        panic!("Memory access violation: {:x}", addr);
+    }
+
+    pub fn write_32(&mut self, addr: Address128, value: Word32) {
+        self.check_permissions(addr, MemoryPermissions::Write);
+        let region = self.find_region_mut(addr);
+        if let Some(region) = region {
+            let offset = addr - region.start;
+            region.data[offset as usize] = (value & 0xFF) as Word8;
+            region.data[offset as usize + 1] = ((value >> 8) & 0xFF) as Word8;
+            region.data[offset as usize + 2] = ((value >> 16) & 0xFF) as Word8;
+            region.data[offset as usize + 3] = ((value >> 24) & 0xFF) as Word8;
+            return;
+        }
+        panic!("Memory access violation: {:x}", addr);
+    }
+
+    pub fn write_64(&mut self, addr: Address128, value: Word64) {
+        self.check_permissions(addr, MemoryPermissions::Write);
+        let region = self.find_region_mut(addr);
+        if let Some(region) = region {
+            let offset = addr - region.start;
+            region.data[offset as usize] = (value & 0xFF) as Word8;
+            region.data[offset as usize + 1] = ((value >> 8) & 0xFF) as Word8;
+            region.data[offset as usize + 2] = ((value >> 16) & 0xFF) as Word8;
+            region.data[offset as usize + 3] = ((value >> 24) & 0xFF) as Word8;
+            region.data[offset as usize + 4] = ((value >> 32) & 0xFF) as Word8;
+            region.data[offset as usize + 5] = ((value >> 40) & 0xFF) as Word8;
+            region.data[offset as usize + 6] = ((value >> 48) & 0xFF) as Word8;
+            region.data[offset as usize + 7] = ((value >> 56) & 0xFF) as Word8;
+            return;
+        }
+        panic!("Memory access violation: {:x}", addr);
+    }
+
+    pub fn write_128(&mut self, addr: Address128, value: Word128) {
+        self.check_permissions(addr, MemoryPermissions::Write);
+        let region = self.find_region_mut(addr);
+        if let Some(region) = region {
+            let offset = addr - region.start;
+            region.data[offset as usize] = (value & 0xFF) as Word8;
+            region.data[offset as usize + 1] = ((value >> 8) & 0xFF) as Word8;
+            region.data[offset as usize + 2] = ((value >> 16) & 0xFF) as Word8;
+            region.data[offset as usize + 3] = ((value >> 24) & 0xFF) as Word8;
+            region.data[offset as usize + 4] = ((value >> 32) & 0xFF) as Word8;
+            region.data[offset as usize + 5] = ((value >> 40) & 0xFF) as Word8;
+            region.data[offset as usize + 6] = ((value >> 48) & 0xFF) as Word8;
+            region.data[offset as usize + 7] = ((value >> 56) & 0xFF) as Word8;
+            region.data[offset as usize + 8] = ((value >> 64) & 0xFF) as Word8;
+            region.data[offset as usize + 9] = ((value >> 72) & 0xFF) as Word8;
+            region.data[offset as usize + 10] = ((value >> 80) & 0xFF) as Word8;
+            region.data[offset as usize + 11] = ((value >> 88) & 0xFF) as Word8;
+            region.data[offset as usize + 12] = ((value >> 96) & 0xFF) as Word8;
+            region.data[offset as usize + 13] = ((value >> 104) & 0xFF) as Word8;
+            region.data[offset as usize + 14] = ((value >> 112) & 0xFF) as Word8;
+            region.data[offset as usize + 15] = ((value >> 120) & 0xFF) as Word8;
+            return;
+        }
+        panic!("Memory access violation: {:x}", addr);
+    }
+
+    pub fn read_bytes(&self, addr: Address128, buffer: &mut [Word8], size: usize) {
+        for i in 0..size {
+            buffer[i] = self.read_8(addr + i as Address128);
+        }
+    }
+
+    pub fn write_bytes(&mut self, addr: Address128, buffer: &[Word8], size: usize) {
+        for i in 0..size {
+            self.write_8(addr + i as Address128, buffer[i]);
+        }
+    }
+
     pub fn add_region(&mut self, start: Address128, size: Address128,
                       perms: MemoryPermissions, name: String){
         self.regions.push(MemoryRegion::new(start, size, perms, name));
+    }
+
+    pub fn remove_region(&mut self, start: Address128) {
+        for i in 0..self.regions.len() {
+            if self.regions[i].start == start {
+                self.regions.remove(i);
+                return;
+            }
+        }
+    }
+
+    pub fn has_region(&self, addr: Address128) -> bool {
+        return self.find_region(addr).is_some();
     }
 
     pub fn get_permissions(&self, addr: Address128) -> MemoryPermissions {
@@ -149,8 +255,31 @@ impl Memory {
         MemoryPermissions::None
     }
 
+    pub fn reset(&mut self) {
+        for region in &mut self.regions {
+            region.data.fill(0);
+        }
+    }
+
+    pub fn get_size(&self) -> Address128 {
+        self.size
+    }
+
+    pub fn is_valid_address(&self, addr: Address128) -> bool {
+        self.find_region(addr).is_some()
+    }
+
     fn find_region(&self, addr: Address128) -> Option<&MemoryRegion> {
         for region in &self.regions {
+            if addr >= region.start && addr < region.end {
+                return Some(region);
+            }
+        }
+        None
+    }
+
+    fn find_region_mut(&mut self, addr: Address128) -> Option<&mut MemoryRegion> {
+        for region in &mut self.regions {
             if addr >= region.start && addr < region.end {
                 return Some(region);
             }
