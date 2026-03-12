@@ -84,18 +84,18 @@ enum InstructionType {
     Unknown,
 }
 
-struct DecodedInstruction {
+pub struct DecodedInstruction {
     opcode: OpCode,
     typ: InstructionType,
-    rd: u8,
-    rs1: u8,
-    rs2: u8,
+    pub(crate) rd: u8,
+    pub(crate) rs1: u8,
+    pub(crate) rs2: u8,
     funct3: u8,
     funct7: u8,
     imm: i128,
 }
 
-struct InstructionDecoder {}
+pub struct InstructionDecoder {}
 
 impl DecodedInstruction {
     fn new() -> Self {

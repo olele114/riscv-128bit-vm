@@ -1,6 +1,8 @@
 use crate::riscv::memory;
 use crate::riscv::register;
-
+use crate::riscv::instruction;
+use crate::riscv::executor;
+use crate::riscv::register::Register;
 
 type InstructionCallback = Box<dyn Fn(u32, memory::Address128)>;
 
@@ -27,7 +29,7 @@ struct Exception {
     message: String,
 }
 
-struct CPU {
+pub(crate) struct CPU {
     registers: register::Register,
     memory: memory::Memory,
     state: CPUState,
@@ -64,6 +66,28 @@ impl CPU {
             return;
         }
 
-        todo!();
+        let pc = self.registers.get_pc();
+
+        let instruction = self.fetch_instruction(pc);
+
+        let decoded = instruction::InstructionDecoder::decode(instruction);
+
+        if self.debug_mode {
+            println!("[DEBUG] PC: 0x{:x} Instr: 0x{:x} ({})", pc, instruction, instruction::InstructionDecoder::get_instruction_name(&decoded));
+        }
+
+
+    }
+
+    pub fn fetch_instruction(&self, pc: memory::Address128) -> u32 {
+        return self.memory.read_32(pc);
+    }
+
+    pub fn get_registers(&self) -> &Register {
+        &self.registers
+    }
+
+    pub fn get_registers_mut(&mut self) -> &mut Register {
+        &mut self.registers
     }
 }
