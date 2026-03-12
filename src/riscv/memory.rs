@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 
-type Address128 = u128;
+pub(crate) type Address128 = u128;
 type Word128 = u128;
 type Word64 = u64;
 type Word32 = u32;
