@@ -2,6 +2,8 @@ use crate::riscv::memory;
 use crate::riscv::register;
 use crate::riscv::instruction;
 use crate::riscv::executor;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 type InstructionCallback = Box<dyn Fn(u32, memory::Address128)>;
 
@@ -30,7 +32,7 @@ pub struct Exception {
 
 pub(crate) struct CPU {
     registers: register::Register,
-    memory: memory::Memory,
+    memory: Rc<RefCell<memory::Memory>>,
     state: CPUState,
     last_exception: Option<Exception>,
     cycle_count: u64,
@@ -49,7 +51,7 @@ impl Exception {
 }
 
 impl CPU {
-    pub fn new(memory: memory::Memory) -> Self {
+    pub fn new(memory: Rc<RefCell<memory::Memory>>) -> Self {
         Self {
             memory,
             state: CPUState::Halted,
@@ -97,7 +99,7 @@ impl CPU {
 
     pub fn reset(&mut self) {
         self.registers.reset();
-        self.memory.reset();
+        self.memory.borrow_mut().reset();
         self.state = CPUState::Halted;
         self.cycle_count = 0;
         self.clear_exception();
@@ -132,7 +134,7 @@ impl CPU {
     }
 
     pub fn fetch_instruction(&self, pc: memory::Address128) -> u32 {
-        self.memory.read_32(pc)
+        self.memory.borrow().read_32(pc)
     }
 
     pub fn get_registers(&self) -> &register::Register {
@@ -143,11 +145,11 @@ impl CPU {
         &mut self.registers
     }
 
-    pub fn get_memory(&self) -> &memory::Memory {
+    pub fn get_memory(&self) -> &Rc<RefCell<memory::Memory>> {
         &self.memory
     }
 
-    pub fn get_memory_mut(&mut self) -> &mut memory::Memory {
+    pub fn get_memory_mut(&mut self) -> &mut Rc<RefCell<memory::Memory>> {
         &mut self.memory
     }
 

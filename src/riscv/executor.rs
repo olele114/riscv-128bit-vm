@@ -354,7 +354,7 @@ impl Executor {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        let rd_val = cpu.get_memory().read_8(addr);
+        let rd_val = cpu.get_memory().borrow().read_8(addr);
         Self::set_reg_value(cpu.get_registers_mut(), decoded.rd, rd_val as i128);
         result
     }
@@ -363,7 +363,7 @@ impl Executor {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        let rd_val = cpu.get_memory().read_16(addr);
+        let rd_val = cpu.get_memory().borrow().read_16(addr);
         Self::set_reg_value(cpu.get_registers_mut(), decoded.rd, rd_val as i128);
         result
     }
@@ -372,7 +372,7 @@ impl Executor {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        let rd_val = cpu.get_memory().read_32(addr);
+        let rd_val = cpu.get_memory().borrow().read_32(addr);
         Self::set_reg_value(cpu.get_registers_mut(), decoded.rd, rd_val as i128);
         result
     }
@@ -381,7 +381,7 @@ impl Executor {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        let rd_val = cpu.get_memory().read_64(addr);
+        let rd_val = cpu.get_memory().borrow().read_64(addr);
         Self::set_reg_value(cpu.get_registers_mut(), decoded.rd, rd_val as i128);
         result
     }
@@ -390,7 +390,7 @@ impl Executor {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        let rd_val = cpu.get_memory().read_128(addr);
+        let rd_val = cpu.get_memory().borrow().read_128(addr);
         Self::set_reg_value(cpu.get_registers_mut(), decoded.rd, rd_val as i128);
         result
     }
@@ -399,7 +399,7 @@ impl Executor {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        let rd_val = cpu.get_memory().read_8(addr) as u128;
+        let rd_val = cpu.get_memory().borrow().read_8(addr) as u128;
         Self::set_reg_value(cpu.get_registers_mut(), decoded.rd, rd_val as i128);
         result
     }
@@ -408,7 +408,7 @@ impl Executor {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        let rd_val = cpu.get_memory().read_16(addr) as u128;
+        let rd_val = cpu.get_memory().borrow().read_16(addr) as u128;
         Self::set_reg_value(cpu.get_registers_mut(), decoded.rd, rd_val as i128);
         result
     }
@@ -417,7 +417,7 @@ impl Executor {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        let rd_val = cpu.get_memory().read_32(addr) as u128;
+        let rd_val = cpu.get_memory().borrow().read_32(addr) as u128;
         Self::set_reg_value(cpu.get_registers_mut(), decoded.rd, rd_val as i128);
         result
     }
@@ -426,7 +426,7 @@ impl Executor {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        let rd_val = cpu.get_memory().read_64(addr) as u128;
+        let rd_val = cpu.get_memory().borrow().read_64(addr) as u128;
         Self::set_reg_value(cpu.get_registers_mut(), decoded.rd, rd_val as i128);
         result
     }
@@ -437,7 +437,7 @@ impl Executor {
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let rs2_val = Self::get_reg_value(cpu.get_registers(), decoded.rs2);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        cpu.get_memory_mut().write_8(addr, rs2_val as u8);
+        cpu.get_memory().borrow_mut().write_8(addr, rs2_val as u8);
         result
     }
 
@@ -446,7 +446,7 @@ impl Executor {
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let rs2_val = Self::get_reg_value(cpu.get_registers(), decoded.rs2);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        cpu.get_memory_mut().write_16(addr, rs2_val as u16);
+        cpu.get_memory().borrow_mut().write_16(addr, rs2_val as u16);
         result
     }
 
@@ -455,7 +455,7 @@ impl Executor {
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let rs2_val = Self::get_reg_value(cpu.get_registers(), decoded.rs2);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        cpu.get_memory_mut().write_32(addr, rs2_val as u32);
+        cpu.get_memory().borrow_mut().write_32(addr, rs2_val as u32);
         result
     }
 
@@ -464,7 +464,7 @@ impl Executor {
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let rs2_val = Self::get_reg_value(cpu.get_registers(), decoded.rs2);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        cpu.get_memory_mut().write_64(addr, rs2_val as u64);
+        cpu.get_memory().borrow_mut().write_64(addr, rs2_val as u64);
         result
     }
 
@@ -473,7 +473,7 @@ impl Executor {
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
         let rs2_val = Self::get_reg_value(cpu.get_registers(), decoded.rs2);
         let addr = (rs1_val + decoded.imm) as memory::Address128;
-        cpu.get_memory_mut().write_128(addr, rs2_val as memory::Word128);
+        cpu.get_memory().borrow_mut().write_128(addr, rs2_val as memory::Word128);
         result
     }
 
