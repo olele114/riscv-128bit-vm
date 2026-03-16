@@ -1046,7 +1046,7 @@ impl Assembler {
                         _ => format!("system 0x{:03x}", imm),
                     }
                 } else {
-                    format!("csr ???")
+                    "csr ???".to_string()
                 }
             }
             _ => format!("unknown opcode 0x{:02x}", opcode),
