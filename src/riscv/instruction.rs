@@ -1,5 +1,5 @@
 #[repr(u8)]
-enum OpCode {
+pub enum OpCode {
     Lui = 0x37,
     Auipc = 0x17,
     Jal = 0x6f,
@@ -33,7 +33,7 @@ enum Funct7 {
 }
 
 #[repr(u8)]
-enum BranchFunct3 {
+pub(crate) enum BranchFunct3 {
     Beq = 0x0,
     Bne = 0x1,
     Blt = 0x4,
@@ -85,14 +85,14 @@ enum InstructionType {
 }
 
 pub struct DecodedInstruction {
-    opcode: OpCode,
+    pub(crate) opcode: OpCode,
     typ: InstructionType,
     pub(crate) rd: u8,
     pub(crate) rs1: u8,
     pub(crate) rs2: u8,
-    funct3: u8,
-    funct7: u8,
-    imm: i128,
+    pub(crate) funct3: u8,
+    pub(crate) funct7: u8,
+    pub(crate) imm: i128,
 }
 
 pub struct InstructionDecoder {}
