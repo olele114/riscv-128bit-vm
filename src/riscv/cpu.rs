@@ -14,6 +14,7 @@ pub enum CPUState {
     Exception,
 }
 
+#[derive(Copy, Clone, Debug)]
 pub enum ExceptionType {
     None,
     IllegalInstruction,
@@ -23,11 +24,12 @@ pub enum ExceptionType {
     Unknown,
 }
 
+#[derive(Clone)]
 pub struct Exception {
-    typ: ExceptionType,
-    code: u64,
-    address: memory::Address128,
-    message: String,
+    pub(crate) typ: ExceptionType,
+    pub(crate) code: u64,
+    pub(crate) address: memory::Address128,
+    pub(crate) message: String,
 }
 
 pub(crate) struct CPU {
