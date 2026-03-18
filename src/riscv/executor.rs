@@ -1,19 +1,83 @@
+//! Instruction Executor Module
+//!
+//! Executes decoded RISC-V instructions on the CPU.
+//! Implements all instruction types: R-type, I-type, S-type,
+//! B-type, U-type, and J-type.
+//!
+//! # Instruction Categories
+//!
+//! - **R-type**: ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
+//! - **I-type**: ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
+//! - **Load**: LB, LH, LW, LD, LQ, LBU, LHU, LWU, LDU
+//! - **Store**: SB, SH, SW, SD, SQ
+//! - **Branch**: BEQ, BNE, BLT, BGE, BLTU, BGEU
+//! - **U-type**: LUI, AUIPC
+//! - **J-type**: JAL, JALR
+//! - **System**: ECALL, EBREAK
+//!
+//! ---
+//!
+//! 指令执行器模块
+//!
+//! 在 CPU 上执行解码后的 RISC-V 指令。
+//! 实现所有指令类型：R-type、I-type、S-type、B-type、U-type 和 J-type。
+//!
+//! # 指令类别
+//!
+//! - **R-type**: ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
+//! - **I-type**: ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
+//! - **Load**: LB, LH, LW, LD, LQ, LBU, LHU, LWU, LDU
+//! - **Store**: SB, SH, SW, SD, SQ
+//! - **Branch**: BEQ, BNE, BLT, BGE, BLTU, BGEU
+//! - **U-type**: LUI, AUIPC
+//! - **J-type**: JAL, JALR
+//! - **System**: ECALL, EBREAK
+
+#![allow(dead_code)]
+
 use crate::riscv::instruction;
 use crate::riscv::memory;
 use crate::riscv::register;
 use crate::riscv::cpu;
-use crate::riscv::memory::Memory;
 
+/// Result of instruction execution.
+///
+/// Contains information about whether the instruction succeeded,
+/// whether a branch was taken, and the next PC if applicable.
+///
+/// ---
+///
+/// 指令执行结果。
+///
+/// 包含指令是否成功、是否发生分支以及下一个 PC（如适用）的信息。
 pub struct ExecutionResult {
+    /// Whether execution succeeded (执行是否成功)
     pub(crate) success: bool,
+    /// Whether a branch was taken (是否发生分支)
     pub(crate) branch_taken: bool,
+    /// Next PC if branch was taken (发生分支时的下一个 PC)
     pub(crate) next_pc: memory::Address128,
+    /// Error message if execution failed (执行失败时的错误信息)
     error_message: String,
 }
 
+/// Instruction Executor.
+///
+/// Provides static methods for executing all RISC-V instructions.
+///
+/// ---
+///
+/// 指令执行器。
+///
+/// 提供执行所有 RISC-V 指令的静态方法。
 pub struct Executor {}
 
 impl ExecutionResult {
+    /// Creates a new successful execution result.
+    ///
+    /// ---
+    ///
+    /// 创建新的成功执行结果。
     pub fn new() -> Self {
         Self {
             success: true,
@@ -25,6 +89,15 @@ impl ExecutionResult {
 }
 
 impl Executor {
+    /// Gets the value of a register.
+    ///
+    /// Register 0 always returns 0 (hardwired zero).
+    ///
+    /// ---
+    ///
+    /// 获取寄存器的值。
+    ///
+    /// 寄存器 0 始终返回 0（硬连线零）。
     fn get_reg_value(regs: &register::Register, reg: u8) -> i128 {
         if reg == 0 {
             return 0;
@@ -35,6 +108,15 @@ impl Executor {
         regs.read(unsafe { std::mem::transmute::<u8, register::RegisterIndex>(reg) }) as i128
     }
 
+    /// Sets the value of a register.
+    ///
+    /// Writes to register 0 are ignored (hardwired zero).
+    ///
+    /// ---
+    ///
+    /// 设置寄存器的值。
+    ///
+    /// 对寄存器 0 的写入被忽略（硬连线零）。
     fn set_reg_value(regs: &mut register::Register, reg: u8, value: i128) {
         if reg == 0 {
             return;
@@ -45,6 +127,15 @@ impl Executor {
         regs.write(unsafe { std::mem::transmute::<u8, register::RegisterIndex>(reg) }, value as u128);
     }
 
+    /// Executes a decoded instruction on the CPU.
+    ///
+    /// Dispatches to the appropriate instruction handler based on opcode.
+    ///
+    /// ---
+    ///
+    /// 在 CPU 上执行解码后的指令。
+    ///
+    /// 根据操作码分派到相应的指令处理程序。
     pub fn execute(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let mut result = ExecutionResult::new();
 
@@ -157,7 +248,13 @@ impl Executor {
         }
     }
 
-    // R-type
+    // ========================================
+    // R-type Instructions / R 型指令
+    // ========================================
+
+    /// ADD: Add registers (寄存器加法)
+    ///
+    /// rd = rs1 + rs2
     fn execute_add(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -168,6 +265,9 @@ impl Executor {
         result
     }
 
+    /// SUB: Subtract registers (寄存器减法)
+    ///
+    /// rd = rs1 - rs2
     fn execute_sub(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -178,6 +278,9 @@ impl Executor {
         result
     }
 
+    /// SLL: Shift left logical (逻辑左移)
+    ///
+    /// rd = rs1 << (rs2 & 0x7f)
     fn execute_sll(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -189,6 +292,9 @@ impl Executor {
         result
     }
 
+    /// SLT: Set less than (有符号小于设置)
+    ///
+    /// rd = (rs1 < rs2) ? 1 : 0 (signed comparison)
     fn execute_slt(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -199,6 +305,9 @@ impl Executor {
         result
     }
 
+    /// SLTU: Set less than unsigned (无符号小于设置)
+    ///
+    /// rd = (rs1 < rs2) ? 1 : 0 (unsigned comparison)
     fn execute_sltu(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -209,6 +318,9 @@ impl Executor {
         result
     }
 
+    /// XOR: Bitwise exclusive OR (按位异或)
+    ///
+    /// rd = rs1 ^ rs2
     fn execute_xor(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -219,6 +331,9 @@ impl Executor {
         result
     }
 
+    /// SRL: Shift right logical (逻辑右移)
+    ///
+    /// rd = rs1 >> (rs2 & 0x7f) (zero-extended)
     fn execute_srl(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -230,6 +345,9 @@ impl Executor {
         result
     }
 
+    /// SRA: Shift right arithmetic (算术右移)
+    ///
+    /// rd = rs1 >> (rs2 & 0x7f) (sign-extended)
     fn execute_sra(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -241,6 +359,9 @@ impl Executor {
         result
     }
 
+    /// OR: Bitwise OR (按位或)
+    ///
+    /// rd = rs1 | rs2
     fn execute_or(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -251,6 +372,9 @@ impl Executor {
         result
     }
 
+    /// AND: Bitwise AND (按位与)
+    ///
+    /// rd = rs1 & rs2
     fn execute_and(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -261,7 +385,13 @@ impl Executor {
         result
     }
 
-    // I-type
+    // ========================================
+    // I-type Instructions / I 型指令
+    // ========================================
+
+    /// ADDI: Add immediate (立即数加法)
+    ///
+    /// rd = rs1 + imm
     fn execute_addi(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -271,6 +401,9 @@ impl Executor {
         result
     }
 
+    /// SLLI: Shift left logical immediate (立即数逻辑左移)
+    ///
+    /// rd = rs1 << (imm & 0x7f)
     fn execute_slli(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -281,6 +414,9 @@ impl Executor {
         result
     }
 
+    /// SLTI: Set less than immediate (有符号立即数小于设置)
+    ///
+    /// rd = (rs1 < imm) ? 1 : 0 (signed comparison)
     fn execute_slti(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -291,6 +427,9 @@ impl Executor {
         result
     }
 
+    /// SLTIU: Set less than immediate unsigned (无符号立即数小于设置)
+    ///
+    /// rd = (rs1 < imm) ? 1 : 0 (unsigned comparison)
     fn execute_sltiu(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -301,6 +440,9 @@ impl Executor {
         result
     }
 
+    /// XORI: XOR immediate (立即数异或)
+    ///
+    /// rd = rs1 ^ imm
     fn execute_xori(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -310,6 +452,9 @@ impl Executor {
         result
     }
 
+    /// SRLI: Shift right logical immediate (立即数逻辑右移)
+    ///
+    /// rd = rs1 >> (imm & 0x7f) (zero-extended)
     fn execute_srli(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -320,6 +465,9 @@ impl Executor {
         result
     }
 
+    /// SRAI: Shift right arithmetic immediate (立即数算术右移)
+    ///
+    /// rd = rs1 >> (imm & 0x7f) (sign-extended)
     fn execute_srai(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -330,6 +478,9 @@ impl Executor {
         result
     }
 
+    /// ORI: OR immediate (立即数或)
+    ///
+    /// rd = rs1 | imm
     fn execute_ori(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -339,6 +490,9 @@ impl Executor {
         result
     }
 
+    /// ANDI: AND immediate (立即数与)
+    ///
+    /// rd = rs1 & imm
     fn execute_andi(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let regs = cpu.get_registers_mut();
@@ -348,8 +502,11 @@ impl Executor {
         result
     }
 
-    // Load instructions
+    // ========================================
+    // Load Instructions / 加载指令
+    // ========================================
 
+    /// LB: Load byte (加载字节，符号扩展)
     fn execute_lb(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -359,6 +516,7 @@ impl Executor {
         result
     }
 
+    /// LH: Load halfword (加载半字，符号扩展)
     fn execute_lh(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -368,6 +526,7 @@ impl Executor {
         result
     }
 
+    /// LW: Load word (加载字，符号扩展)
     fn execute_lw(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -377,6 +536,7 @@ impl Executor {
         result
     }
 
+    /// LD: Load doubleword (加载双字，符号扩展)
     fn execute_ld(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -386,6 +546,7 @@ impl Executor {
         result
     }
 
+    /// LQ: Load quadword (加载四字，符号扩展)
     fn execute_lq(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -395,6 +556,7 @@ impl Executor {
         result
     }
 
+    /// LBU: Load byte unsigned (加载字节，零扩展)
     fn execute_lbu(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -404,6 +566,7 @@ impl Executor {
         result
     }
 
+    /// LHU: Load halfword unsigned (加载半字，零扩展)
     fn execute_lhu(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -413,6 +576,7 @@ impl Executor {
         result
     }
 
+    /// LWU: Load word unsigned (加载字，零扩展)
     fn execute_lwu(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -422,6 +586,7 @@ impl Executor {
         result
     }
 
+    /// LDU: Load doubleword unsigned (加载双字，零扩展)
     fn execute_ldu(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -431,7 +596,11 @@ impl Executor {
         result
     }
 
-    // Store instructions
+    // ========================================
+    // Store Instructions / 存储指令
+    // ========================================
+
+    /// SB: Store byte (存储字节)
     fn execute_sb(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -441,6 +610,7 @@ impl Executor {
         result
     }
 
+    /// SH: Store halfword (存储半字)
     fn execute_sh(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -450,6 +620,7 @@ impl Executor {
         result
     }
 
+    /// SW: Store word (存储字)
     fn execute_sw(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -459,6 +630,7 @@ impl Executor {
         result
     }
 
+    /// SD: Store doubleword (存储双字)
     fn execute_sd(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -468,6 +640,7 @@ impl Executor {
         result
     }
 
+    /// SQ: Store quadword (存储四字)
     fn execute_sq(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -477,7 +650,11 @@ impl Executor {
         result
     }
 
-    // Branch instructions
+    // ========================================
+    // Branch Instructions / 分支指令
+    // ========================================
+
+    /// BEQ: Branch if equal (相等则分支)
     fn execute_beq(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let mut result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -491,6 +668,7 @@ impl Executor {
         result
     }
 
+    /// BNE: Branch if not equal (不等则分支)
     fn execute_bne(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let mut result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -504,6 +682,7 @@ impl Executor {
         result
     }
 
+    /// BLT: Branch if less than (有符号小于则分支)
     fn execute_blt(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let mut result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -517,6 +696,7 @@ impl Executor {
         result
     }
 
+    /// BGE: Branch if greater or equal (有符号大于等于则分支)
     fn execute_bge(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let mut result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1);
@@ -530,6 +710,7 @@ impl Executor {
         result
     }
 
+    /// BLTU: Branch if less than unsigned (无符号小于则分支)
     fn execute_bltu(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let mut result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1) as u128;
@@ -543,6 +724,7 @@ impl Executor {
         result
     }
 
+    /// BGEU: Branch if greater or equal unsigned (无符号大于等于则分支)
     fn execute_bgeu(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let mut result = ExecutionResult::new();
         let rs1_val = Self::get_reg_value(cpu.get_registers(), decoded.rs1) as u128;
@@ -556,13 +738,22 @@ impl Executor {
         result
     }
 
-    // U-type instructions
+    // ========================================
+    // U-type Instructions / U 型指令
+    // ========================================
+
+    /// LUI: Load upper immediate (加载上位立即数)
+    ///
+    /// rd = imm (upper 20 bits)
     fn execute_lui(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         Self::set_reg_value(cpu.get_registers_mut(), decoded.rd, decoded.imm);
         result
     }
 
+    /// AUIPC: Add upper immediate to PC (将上位立即数加到 PC)
+    ///
+    /// rd = PC + imm
     fn execute_auipc(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let result = ExecutionResult::new();
         let pc = cpu.get_registers().get_pc();
@@ -570,7 +761,13 @@ impl Executor {
         result
     }
 
-    // J-type instructions
+    // ========================================
+    // J-type Instructions / J 型指令
+    // ========================================
+
+    /// JAL: Jump and link (跳转并链接)
+    ///
+    /// rd = PC + 4; PC += imm
     fn execute_jal(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let mut result = ExecutionResult::new();
 
@@ -582,6 +779,9 @@ impl Executor {
         result
     }
 
+    /// JALR: Jump and link register (寄存器跳转并链接)
+    ///
+    /// rd = PC + 4; PC = (rs1 + imm) & ~1
     fn execute_jalr(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
         let mut result = ExecutionResult::new();
 
@@ -597,7 +797,13 @@ impl Executor {
         result
     }
 
-    // System instructions
+    // ========================================
+    // System Instructions / 系统指令
+    // ========================================
+
+    /// ECALL: Environment call (环境调用)
+    ///
+    /// Raises a system call exception.
     fn execute_ecall(cpu: &mut cpu::CPU) -> ExecutionResult {
         let mut result = ExecutionResult::new();
         cpu.raise_exception(cpu::ExceptionType::SystemCall, 0, cpu.get_registers().get_pc(), String::from("ECALL"));
@@ -606,6 +812,9 @@ impl Executor {
         result
     }
 
+    /// EBREAK: Environment break (环境断点)
+    ///
+    /// Raises a breakpoint exception.
     fn execute_ebreak(cpu: &mut cpu::CPU) -> ExecutionResult {
         let mut result = ExecutionResult::new();
         cpu.raise_exception(cpu::ExceptionType::Breakpoint, 0, cpu.get_registers().get_pc(), String::from("EBREAK"));

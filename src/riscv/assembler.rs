@@ -1,9 +1,73 @@
+//! RISC-V Assembler Module
+//!
+//! Provides assembly functionality for RISC-V source code.
+//! Supports standard RISC-V instructions, pseudo-instructions,
+//! labels, and various data directives.
+//!
+//! # Supported Features
+//!
+//! - All base RISC-V I-extension instructions
+//! - Pseudo-instructions: nop, mv, li, la, j, ret, call, etc.
+//! - Labels and symbol resolution
+//! - Data directives: .byte, .word, .ascii, .space, etc.
+//! - Comments: # and // style
+//!
+//! # Example
+//!
+//! ```ignore
+//! use riscv::assembler::assemble_string;
+//!
+//! let source = r#"
+//!     li a0, 42
+//!     add a1, a0, a0
+//!     ebreak
+//! "#;
+//! let machine_code = assemble_string(source, 0x0).unwrap();
+//! ```
+//!
+//! ---
+//!
+//! RISC-V 汇编器模块
+//!
+//! 提供 RISC-V 源代码的汇编功能。
+//! 支持标准 RISC-V 指令、伪指令、标签和各种数据指令。
+//!
+//! # 支持的功能
+//!
+//! - 所有基础 RISC-V I 扩展指令
+//! - 伪指令：nop, mv, li, la, j, ret, call 等
+//! - 标签和符号解析
+//! - 数据指令：.byte, .word, .ascii, .space 等
+//! - 注释：# 和 // 风格
+//!
+//! # 示例
+//!
+//! ```ignore
+//! use riscv::assembler::assemble_string;
+//!
+//! let source = r#"
+//!     li a0, 42
+//!     add a1, a0, a0
+//!     ebreak
+//! "#;
+//! let machine_code = assemble_string(source, 0x0).unwrap();
+//! ```
+
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::io::{self, BufRead};
 
+/// Assembly error with line number and message.
+///
+/// ---
+///
+/// 汇编错误，包含行号和消息。
 #[derive(Debug, Clone)]
 pub struct AssemblyError {
+    /// Line number where the error occurred (发生错误的行号)
     pub line: usize,
+    /// Error message (错误消息)
     pub message: String,
 }
 
@@ -13,17 +77,33 @@ impl std::fmt::Display for AssemblyError {
     }
 }
 
+/// Symbol information for labels and addresses.
+///
+/// ---
+///
+/// 标签和地址的符号信息。
 #[derive(Debug, Clone)]
 pub struct Symbol {
+    /// Symbol name (符号名称)
     pub name: String,
+    /// Symbol address (符号地址)
     pub address: u64,
+    /// Section where symbol is defined (符号定义的段)
     pub section: Section,
 }
 
+/// Memory section types.
+///
+/// ---
+///
+/// 内存段类型。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Section {
+    /// Code section (.text) (代码段)
     Text,
+    /// Initialized data section (.data) (已初始化数据段)
     Data,
+    /// Uninitialized data section (.bss) (未初始化数据段)
     Bss,
 }
 
@@ -50,6 +130,18 @@ struct AssembledInstruction {
     line_number: usize,
 }
 
+/// RISC-V Assembler
+///
+/// Assembles RISC-V assembly source into machine code.
+/// Performs two-pass assembly: first pass collects labels,
+/// second pass encodes instructions.
+///
+/// ---
+///
+/// RISC-V 汇编器
+///
+/// 将 RISC-V 汇编源码汇编为机器码。
+/// 执行两遍汇编：第一遍收集标签，第二遍编码指令。
 pub struct Assembler {
     symbols: HashMap<String, Symbol>,
     pending_relocations: Vec<PendingRelocation>,
@@ -65,6 +157,15 @@ pub struct Assembler {
 }
 
 impl Assembler {
+    /// Creates a new Assembler with default settings.
+    ///
+    /// Default base addresses: text=0, data=0x10000, bss=0x20000.
+    ///
+    /// ---
+    ///
+    /// 使用默认设置创建新汇编器。
+    ///
+    /// 默认基址：text=0, data=0x10000, bss=0x20000。
     pub fn new() -> Self {
         Self {
             symbols: HashMap::new(),
@@ -81,6 +182,11 @@ impl Assembler {
         }
     }
 
+    /// Sets base addresses for code and data sections.
+    ///
+    /// ---
+    ///
+    /// 设置代码和数据段的基址。
     pub fn set_base_addresses(&mut self, text_base: u64, data_base: u64, bss_base: u64) {
         self.text_base = text_base;
         self.data_base = data_base;
@@ -88,6 +194,15 @@ impl Assembler {
         self.current_address = text_base;
     }
 
+    /// Assembles an assembly file.
+    ///
+    /// Reads and assembles the specified file.
+    ///
+    /// ---
+    ///
+    /// 汇编汇编文件。
+    ///
+    /// 读取并汇编指定文件。
     pub fn assemble_file(&mut self, filename: &str) -> Result<Vec<u8>, AssemblyError> {
         let file = std::fs::File::open(filename)
             .map_err(|e| AssemblyError {
@@ -99,6 +214,15 @@ impl Assembler {
         self.assemble(&lines)
     }
 
+    /// Assembles multiple lines of assembly code.
+    ///
+    /// Performs two-pass assembly and returns machine code.
+    ///
+    /// ---
+    ///
+    /// 汇编多行汇编代码。
+    ///
+    /// 执行两遍汇编并返回机器码。
     pub fn assemble(&mut self, lines: &[String]) -> Result<Vec<u8>, AssemblyError> {
         self.first_pass(lines)?;
         self.second_pass()?;
@@ -574,7 +698,7 @@ impl Assembler {
         let negative = imm_str.starts_with('-');
         let imm_str = if negative { &imm_str[1..] } else { imm_str };
         
-        let (value, radix) = if imm_str.starts_with("0x") || imm_str.starts_with("0X") {
+        let (value, _radix) = if imm_str.starts_with("0x") || imm_str.starts_with("0X") {
             (i128::from_str_radix(&imm_str[2..], 16), 16)
         } else if imm_str.starts_with("0b") || imm_str.starts_with("0B") {
             (i128::from_str_radix(&imm_str[2..], 2), 2)
@@ -967,12 +1091,30 @@ pub fn assemble_string(source: &str, base_address: u64) -> Result<Vec<u8>, Assem
     assembler.assemble(&lines)
 }
 
+/// Assembles an assembly file and returns machine code.
+///
+/// Convenience function that creates an assembler and assembles the file.
+///
+/// ---
+///
+/// 汇编汇编文件并返回机器码。
+///
+/// 便捷函数，创建汇编器并汇编文件。
 pub fn assemble_file(filename: &str, base_address: u64) -> Result<Vec<u8>, AssemblyError> {
     let mut assembler = Assembler::new();
     assembler.set_base_addresses(base_address, base_address + 0x10000, base_address + 0x20000);
     assembler.assemble_file(filename)
 }
 
+/// Disassembles a single 32-bit instruction.
+///
+/// Returns a human-readable assembly string.
+///
+/// ---
+///
+/// 反汇编单条 32 位指令。
+///
+/// 返回可读的汇编字符串。
 pub fn disassemble_instruction(code: u32) -> String {
     let assembler = Assembler::new();
     assembler.disassemble(code)

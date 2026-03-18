@@ -1,9 +1,43 @@
+//! RISC-V 128-bit Virtual Machine
+//!
+//! A RISC-V 128-bit virtual machine framework implemented in Rust.
+//!
+//! # Features
+//!
+//! - 128-bit register support (RISC-V I extension)
+//! - Built-in assembler for direct assembly execution
+//! - Flexible memory system with configurable size
+//! - Debug support: single-step, tracing, register inspection
+//!
+//! ---
+//!
+//! RISC-V 128位虚拟机
+//!
+//! 一个用 Rust 实现的 RISC-V 128位虚拟机框架。
+//!
+//! # 特性
+//!
+//! - 128位寄存器支持 (RISC-V I 扩展)
+//! - 内置汇编器，支持直接执行汇编代码
+//! - 灵活的内存系统，可配置大小
+//! - 调试支持：单步执行、追踪、寄存器查看
+
 mod riscv;
 use riscv::virtual_machine::{VirtualMachine, VMConfig};
 use riscv::memory;
 use std::env;
 use std::io::{self, BufRead};
 
+/// Main entry point for the RISC-V virtual machine.
+///
+/// Parses command-line arguments, initializes the virtual machine,
+/// loads the program (binary or assembly), and executes it.
+///
+/// ---
+///
+/// RISC-V 虚拟机的主入口点。
+///
+/// 解析命令行参数，初始化虚拟机，加载程序（二进制或汇编），并执行。
 fn main() {
     let args: Vec<String> = env::args().collect();
     
@@ -137,6 +171,15 @@ fn main() {
     vm.print_register_state();
 }
 
+/// Prints usage information for the command-line interface.
+///
+/// Displays all available options and examples for running the VM.
+///
+/// ---
+///
+/// 打印命令行界面的使用信息。
+///
+/// 显示运行虚拟机的所有可用选项和示例。
 fn print_usage(program_name: &str) {
     println!("RISC-V 128-bit Virtual Machine Framework");
     println!("Usage: {} [options] [program_file]", program_name);
