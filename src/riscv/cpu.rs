@@ -16,6 +16,7 @@ use crate::riscv::memory;
 use crate::riscv::register;
 use crate::riscv::instruction;
 use crate::riscv::executor;
+use crate::riscv::assembler;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -163,7 +164,8 @@ impl CPU {
         let decoded = instruction::InstructionDecoder::decode(instruction);
 
         if self.debug_mode {
-            println!("[DEBUG] PC: 0x{:x} Instr: 0x{:x} ({})", pc, instruction, instruction::InstructionDecoder::get_instruction_name(&decoded));
+            let asm = assembler::disassemble_instruction(instruction);
+            println!("[DEBUG] PC: 0x{:x} Instr: 0x{:x} ({})", pc, instruction, asm);
         }
 
         let result = executor::Executor::execute(self, &decoded);

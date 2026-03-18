@@ -952,6 +952,11 @@ impl Assembler {
         let rs2 = ((code >> 20) & 0x1f) as u8;
         let funct7 = ((code >> 25) & 0x7f) as u8;
         
+        // 先尝试识别伪指令模式
+        if let Some(pseudo) = Self::try_recognize_pseudo(code, rd, funct3, rs1, rs2, funct7) {
+            return pseudo;
+        }
+        
         match opcode {
             0x37 => format!("lui x{}, 0x{:05x}", rd, code >> 12),
             0x17 => format!("auipc x{}, 0x{:05x}", rd, code >> 12),
@@ -1053,6 +1058,171 @@ impl Assembler {
         }
     }
 
+    /// 尝试识别伪指令模式
+    /// 
+    /// 返回识别到的伪指令字符串，如果不是伪指令则返回 None
+    fn try_recognize_pseudo(code: u32, rd: u8, funct3: u8, rs1: u8, rs2: u8, funct7: u8) -> Option<String> {
+        let opcode = code & 0x7f;
+        
+        match opcode {
+            // I-type: addi, xori, slti, sltiu, ori, andi
+            0x13 => {
+                let imm = ((code >> 20) as i32) as i64;
+                let imm_u32 = (code >> 20) & 0xfff;
+                
+                match funct3 {
+                    // addi: 检查 nop, mv, li
+                    0x0 => {
+                        // nop: addi x0, x0, 0
+                        if rd == 0 && rs1 == 0 && imm == 0 {
+                            return Some("nop".to_string());
+                        }
+                        // mv rd, rs: addi rd, rs, 0
+                        if imm == 0 && rs1 != 0 {
+                            return Some(format!("mv x{}, x{}", rd, rs1));
+                        }
+                        // li rd, imm: addi rd, x0, imm (小立即数)
+                        if rs1 == 0 && rd != 0 {
+                            return Some(format!("li x{}, {}", rd, imm));
+                        }
+                    }
+                    // xori: 检查 not
+                    0x4 => {
+                        // not rd, rs: xori rd, rs, -1
+                        if imm_u32 == 0xfff {
+                            return Some(format!("not x{}, x{}", rd, rs1));
+                        }
+                    }
+                    // sltiu: 检查 seqz
+                    0x3 => {
+                        // seqz rd, rs: sltiu rd, rs, 1
+                        if imm == 1 {
+                            return Some(format!("seqz x{}, x{}", rd, rs1));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            // R-type: add, sub, slt, sltu, etc.
+            0x33 => {
+                match funct3 {
+                    // add/sub: 检查 neg
+                    0x0 => {
+                        // neg rd, rs: sub rd, x0, rs
+                        if (funct7 & 0x20) != 0 && rs1 == 0 {
+                            return Some(format!("neg x{}, x{}", rd, rs2));
+                        }
+                    }
+                    // slt: 检查 sltz, sgtz
+                    0x2 => {
+                        // sltz rd, rs: slt rd, rs, x0
+                        if rs2 == 0 {
+                            return Some(format!("sltz x{}, x{}", rd, rs1));
+                        }
+                        // sgtz rd, rs: slt rd, x0, rs
+                        if rs1 == 0 {
+                            return Some(format!("sgtz x{}, x{}", rd, rs2));
+                        }
+                    }
+                    // sltu: 检查 snez
+                    0x3 => {
+                        // snez rd, rs: sltu rd, x0, rs
+                        if rs1 == 0 && rs2 != 0 {
+                            return Some(format!("snez x{}, x{}", rd, rs2));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            // JAL: 检查 j, jal (省略 rd)
+            0x6f => {
+                let offset = Self::extract_j_imm(code);
+                // j label: jal x0, label
+                if rd == 0 {
+                    return Some(format!("j {:+}", offset));
+                }
+                // jal label: jal x1, label (省略 x1)
+                if rd == 1 {
+                    return Some(format!("jal {:+}", offset));
+                }
+            }
+            // JALR: 检查 jr, jalr, ret
+            0x67 => {
+                let imm = ((code >> 20) as i32) as i64;
+                // ret: jalr x0, x1, 0
+                if rd == 0 && rs1 == 1 && imm == 0 {
+                    return Some("ret".to_string());
+                }
+                // jr rs: jalr x0, rs, 0
+                if rd == 0 && imm == 0 {
+                    return Some(format!("jr x{}", rs1));
+                }
+                // jalr rs: jalr x1, rs, 0 (省略 x1)
+                if rd == 1 && imm == 0 {
+                    return Some(format!("jalr x{}", rs1));
+                }
+            }
+            // Branch: 检查 beqz, bnez, blez, bgez, bltz, bgtz
+            0x63 => {
+                let offset = Self::extract_b_imm(code) as i32;
+                match funct3 {
+                    // beq: 检查 beqz
+                    0x0 => {
+                        // beqz rs, label: beq rs, x0, label
+                        if rs2 == 0 {
+                            return Some(format!("beqz x{}, {:+}", rs1, offset));
+                        }
+                    }
+                    // bne: 检查 bnez
+                    0x1 => {
+                        // bnez rs, label: bne rs, x0, label
+                        if rs2 == 0 {
+                            return Some(format!("bnez x{}, {:+}", rs1, offset));
+                        }
+                    }
+                    // blt: 检查 bltz
+                    0x4 => {
+                        // bltz rs, label: blt rs, x0, label
+                        if rs2 == 0 {
+                            return Some(format!("bltz x{}, {:+}", rs1, offset));
+                        }
+                    }
+                    // bge: 检查 bgez
+                    0x5 => {
+                        // bgez rs, label: bge rs, x0, label
+                        if rs2 == 0 {
+                            return Some(format!("bgez x{}, {:+}", rs1, offset));
+                        }
+                    }
+                    // bltu: 检查 bgtz (blt x0, rs, label)
+                    0x6 => {
+                        // bgtz rs, label: bltu x0, rs, label (实际上是 blt x0, rs)
+                        if rs1 == 0 {
+                            return Some(format!("bgtz x{}, {:+}", rs2, offset));
+                        }
+                    }
+                    // bgeu: 检查 blez (bge x0, rs, label 即 ble rs, x0)
+                    0x7 => {
+                        // blez rs, label: bgeu x0, rs, label (实际上是 bge x0, rs)
+                        if rs1 == 0 {
+                            return Some(format!("blez x{}, {:+}", rs2, offset));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            // LUI: 可以是 li 的一部分
+            0x37 => {
+                // lui rd, upper 可以是 li rd, upper<<12 的简化形式
+                // 但通常 lui 单独出现时仍显示为 lui
+                // 这里不特殊处理，保持原样
+            }
+            _ => {}
+        }
+        
+        None
+    }
+
     fn extract_j_imm(code: u32) -> i64 {
         let imm20 = (code >> 31) & 1;
         let imm10_1 = (code >> 21) & 0x3ff;
@@ -1118,4 +1288,121 @@ pub fn assemble_file(filename: &str, base_address: u64) -> Result<Vec<u8>, Assem
 pub fn disassemble_instruction(code: u32) -> String {
     let assembler = Assembler::new();
     assembler.disassemble(code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nop() {
+        // addi x0, x0, 0
+        let code: u32 = 0x00000013;
+        assert_eq!(disassemble_instruction(code), "nop");
+    }
+
+    #[test]
+    fn test_mv() {
+        // addi x10, x11, 0
+        let code: u32 = 0x00058513;
+        assert_eq!(disassemble_instruction(code), "mv x10, x11");
+    }
+
+    #[test]
+    fn test_li_small() {
+        // addi x10, x0, 42
+        let code: u32 = 0x02a00513;
+        assert_eq!(disassemble_instruction(code), "li x10, 42");
+    }
+
+    #[test]
+    fn test_li_zero() {
+        // addi x10, x0, 0
+        let code: u32 = 0x00000513;
+        assert_eq!(disassemble_instruction(code), "li x10, 0");
+    }
+
+    #[test]
+    fn test_not() {
+        // xori x10, x11, -1 (0xfff)
+        let code: u32 = 0xfff5c513;
+        assert_eq!(disassemble_instruction(code), "not x10, x11");
+    }
+
+    #[test]
+    fn test_neg() {
+        // sub x10, x0, x11
+        let code: u32 = 0x40b00533;
+        assert_eq!(disassemble_instruction(code), "neg x10, x11");
+    }
+
+    #[test]
+    fn test_seqz() {
+        // sltiu x10, x11, 1
+        let code: u32 = 0x0015b513;
+        assert_eq!(disassemble_instruction(code), "seqz x10, x11");
+    }
+
+    #[test]
+    fn test_snez() {
+        // sltu x10, x0, x11
+        let code: u32 = 0x00b03533;
+        assert_eq!(disassemble_instruction(code), "snez x10, x11");
+    }
+
+    #[test]
+    fn test_sltz() {
+        // slt x10, x11, x0
+        let code: u32 = 0x0005a533;
+        assert_eq!(disassemble_instruction(code), "sltz x10, x11");
+    }
+
+    #[test]
+    fn test_sgtz() {
+        // slt x10, x0, x11
+        let code: u32 = 0x00b02533;
+        assert_eq!(disassemble_instruction(code), "sgtz x10, x11");
+    }
+
+    #[test]
+    fn test_ret() {
+        // jalr x0, x1, 0
+        let code: u32 = 0x00008067;
+        assert_eq!(disassemble_instruction(code), "ret");
+    }
+
+    #[test]
+    fn test_jr() {
+        // jalr x0, x10, 0
+        let code: u32 = 0x00050067;
+        assert_eq!(disassemble_instruction(code), "jr x10");
+    }
+
+    #[test]
+    fn test_jalr_pseudo() {
+        // jalr x1, x10, 0 -> jalr x10 (pseudo)
+        // I-type: imm[11:0] | rs1 | funct3 | rd | opcode
+        // 验证编码:
+        // rd=1, rs1=10, imm=0, opcode=0x67, funct3=0
+        // = (0 << 20) | (10 << 15) | (0 << 12) | (1 << 7) | 0x67
+        let code: u32 = (0u32 << 20) | (10u32 << 15) | (0u32 << 12) | (1u32 << 7) | 0x67u32;
+        println!("jalr_pseudo test: code=0x{:08x}", code);
+        assert_eq!(disassemble_instruction(code), "jalr x10");
+    }
+
+    #[test]
+    fn test_j() {
+        // jal x0, offset
+        let code: u32 = 0x0040006f; // jal x0, +4
+        let result = disassemble_instruction(code);
+        assert!(result.starts_with("j "), "actual result: {}", result);
+    }
+
+    #[test]
+    fn test_jal_pseudo() {
+        // jal x1, offset
+        let code: u32 = 0x004000ef; // jal x1, +4
+        let result = disassemble_instruction(code);
+        assert!(result.starts_with("jal "), "actual result: {}", result);
+    }
 }
