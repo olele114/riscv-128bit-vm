@@ -1,3 +1,4 @@
+use crate::riscv::assembler;
 use crate::riscv::cpu;
 use crate::riscv::memory;
 use crate::riscv::register;
@@ -5,6 +6,7 @@ use std::cell::RefCell;
 use std::fs;
 use std::io;
 use std::num::ParseIntError;
+use std::path::Path;
 use std::rc::Rc;
 
 #[derive(Clone, Copy)]
@@ -117,6 +119,43 @@ impl VirtualMachine {
         Ok(self.load_bytes(&data, data.len(), load_address))
     }
 
+    pub fn load_assembly(&mut self, file_name: &str, load_address: memory::Address128) -> Result<bool, assembler::AssemblyError> {
+        if !self.initialized {
+            return Err(assembler::AssemblyError {
+                line: 0,
+                message: "Virtual machine not initialized".to_string(),
+            });
+        }
+
+        let addr = load_address as u64;
+        let machine_code = assembler::assemble_file(file_name, addr)?;
+        
+        Ok(self.load_bytes(&machine_code, machine_code.len(), load_address))
+    }
+
+    pub fn load_assembly_string(&mut self, source: &str, load_address: memory::Address128) -> Result<bool, assembler::AssemblyError> {
+        if !self.initialized {
+            return Err(assembler::AssemblyError {
+                line: 0,
+                message: "Virtual machine not initialized".to_string(),
+            });
+        }
+
+        let addr = load_address as u64;
+        let machine_code = assembler::assemble_string(source, addr)?;
+        
+        Ok(self.load_bytes(&machine_code, machine_code.len(), load_address))
+    }
+
+    pub fn is_assembly_file(file_name: &str) -> bool {
+        let path = Path::new(file_name);
+        if let Some(ext) = path.extension() {
+            matches!(ext.to_str(), Some("s") | Some("S") | Some("asm") | Some("ASM"))
+        } else {
+            false
+        }
+    }
+
     pub fn run(&mut self) {
         if !self.initialized {
             eprintln!("VM not initialized");
@@ -153,6 +192,14 @@ impl VirtualMachine {
 
     pub fn is_running(&self) -> bool {
         self.initialized && self.cpu.as_ref().unwrap().is_running()
+    }
+
+    pub fn start(&mut self) {
+        if self.initialized {
+            if let Some(ref mut cpu) = self.cpu {
+                cpu.start();
+            }
+        }
     }
 
     pub fn is_halted(&self) -> bool {

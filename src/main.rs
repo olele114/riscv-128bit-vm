@@ -56,11 +56,22 @@ fn main() {
         println!("Loading program: {}", file);
         println!("Load address: 0x{:x}", load_address);
 
-        match vm.load_program(file, load_address) {
-            Ok(_) => println!("Program loaded successfully"),
-            Err(e) => {
-                eprintln!("Failed to load program: {}", e);
-                return;
+        if VirtualMachine::is_assembly_file(file) {
+            println!("Detected assembly file, assembling...");
+            match vm.load_assembly(file, load_address) {
+                Ok(_) => println!("Assembly assembled and loaded successfully"),
+                Err(e) => {
+                    eprintln!("Failed to assemble program: {}", e);
+                    return;
+                }
+            }
+        } else {
+            match vm.load_program(file, load_address) {
+                Ok(_) => println!("Program loaded successfully"),
+                Err(e) => {
+                    eprintln!("Failed to load program: {}", e);
+                    return;
+                }
             }
         }
     } else {
@@ -86,6 +97,8 @@ fn main() {
     if step_mode {
         println!("Running in single-step mode. Press Enter to execute next instruction, 'q' to quit.");
 
+        vm.start();
+        
         let stdin = io::stdin();
         while vm.is_running() && !vm.has_exception() {
             let mut input = String::new();
@@ -136,6 +149,12 @@ fn print_usage(program_name: &str) {
     println!("  --step              Run in single-step mode");
     println!("  --load-addr <addr>  Set program load address (default: 0x0)");
     println!();
+    println!("Supported file formats:");
+    println!("  .bin, .raw          Raw binary machine code");
+    println!("  .s, .asm            RISC-V assembly source (auto-assembled)");
+    println!();
     println!("Example:");
     println!("  {} --debug --trace program.bin", program_name);
+    println!("  {} program.s", program_name);
+    println!("  {} --load-addr 0x80000000 firmware.asm", program_name);
 }

@@ -99,6 +99,10 @@ impl CPU {
         }
     }
 
+    pub fn start(&mut self) {
+        self.state = CPUState::Running;
+    }
+
     pub fn reset(&mut self) {
         self.registers.reset();
         self.memory.borrow_mut().reset();
