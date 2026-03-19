@@ -1,6 +1,6 @@
 [package]
 name = "riscv-128bit-vm"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2024"
 license = "MIT"
 description = "A high-performance 128-bit RISC-V virtual machine implemented in Rust, featuring custom instruction set extensions and advanced memory management."

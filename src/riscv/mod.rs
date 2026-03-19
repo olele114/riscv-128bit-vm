@@ -9,6 +9,7 @@
 //! - `executor`: Instruction execution engine
 //! - `virtual_machine`: High-level VM interface
 //! - `assembler`: RISC-V assembler for assembly source files
+//! - `debugger`: Interactive debugger with breakpoints and watchpoints
 //!
 //! ---
 //!
@@ -23,6 +24,7 @@
 //! - `executor`: 指令执行引擎
 //! - `virtual_machine`: 高级虚拟机接口
 //! - `assembler`: RISC-V 汇编器，用于汇编源文件
+//! - `debugger`: 交互式调试器，支持断点和观察点
 
 pub mod memory;
 pub mod register;
@@ -31,3 +33,4 @@ pub mod instruction;
 pub mod executor;
 pub mod virtual_machine;
 pub mod assembler;
+pub mod debugger;

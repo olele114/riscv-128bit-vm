@@ -44,6 +44,7 @@ fn main() {
     let mut config = VMConfig::new();
     let mut load_address: memory::Address128 = 0x0;
     let mut step_mode = false;
+    let mut debugger_mode = false;
     let mut program_file: Option<String> = None;
     
     let mut i = 1;
@@ -62,6 +63,12 @@ fn main() {
             config.trace_enabled = true;
         } else if arg == "--step" {
             step_mode = true;
+        } else if arg == "--debugger" || arg == "-d" {
+            debugger_mode = true;
+            config = config.with_debugger();
+        } else if arg == "--history" && i + 1 < args.len() {
+            i += 1;
+            config.history_size = usize::from_str_radix(&args[i], 0).unwrap_or(1000);
         } else if arg == "--load-addr" && i + 1 < args.len() {
             i += 1;
             load_address = u64::from_str_radix(&args[i], 0).unwrap_or(0) as memory::Address128;
@@ -76,6 +83,10 @@ fn main() {
         i += 1;
     }
     
+    // 保存配置值供后续使用
+    let trace_enabled = config.trace_enabled;
+    let memory_size = config.memory_size;
+    
     let mut vm = VirtualMachine::new(config);
     
     if !vm.initialize() {
@@ -84,7 +95,7 @@ fn main() {
     }
 
     println!("RISC-V 128-bit Virtual Machine initialized");
-    println!("Memory size: 0x{:x} bytes", config.memory_size);
+    println!("Memory size: 0x{:x} bytes", memory_size);
     
     if let Some(ref file) = program_file {
         println!("Loading program: {}", file);
@@ -127,8 +138,12 @@ fn main() {
     println!();
     vm.print_register_state();
     
-    println!();
-    if step_mode {
+    // 进入调试器模式或执行模式
+    if debugger_mode {
+        println!();
+        vm.run_debugger();
+    } else if step_mode {
+        println!();
         println!("Running in single-step mode. Press Enter to execute next instruction, 'q' to quit.");
 
         vm.start();
@@ -146,11 +161,12 @@ fn main() {
 
             vm.step();
 
-            if config.trace_enabled {
+            if trace_enabled {
                 vm.print_register_state();
             }
         }
     } else {
+        println!();
         println!("Running program...");
         vm.run();
     }
@@ -187,17 +203,32 @@ fn print_usage(program_name: &str) {
     println!("Options:");
     println!("  --help              Show this help message");
     println!("  --memory <size>     Set memory size in bytes (default: 16MB)");
-    println!("  --debug             Enable debug mode");
+    println!("  --debug             Enable debug mode (print each instruction)");
     println!("  --trace             Enable execution tracing");
     println!("  --step              Run in single-step mode");
+    println!("  -d, --debugger      Start interactive debugger");
+    println!("  --history <n>       Set execution history size (default: 1000)");
     println!("  --load-addr <addr>  Set program load address (default: 0x0)");
     println!();
     println!("Supported file formats:");
     println!("  .bin, .raw          Raw binary machine code");
     println!("  .s, .asm            RISC-V assembly source (auto-assembled)");
     println!();
-    println!("Example:");
+    println!("Debugger Commands:");
+    println!("  c, continue         Continue execution");
+    println!("  s, step             Single step (enter calls)");
+    println!("  n, next             Step over (skip calls)");
+    println!("  b <addr>            Set breakpoint");
+    println!("  info b              List breakpoints");
+    println!("  watch <addr>        Set watchpoint");
+    println!("  p <reg>             Print register");
+    println!("  x <addr>            Examine memory");
+    println!("  history [n]         Show execution history");
+    println!("  help                Show all debugger commands");
+    println!("  q, quit             Exit debugger");
+    println!();
+    println!("Examples:");
     println!("  {} --debug --trace program.bin", program_name);
-    println!("  {} program.s", program_name);
+    println!("  {} -d program.s", program_name);
     println!("  {} --load-addr 0x80000000 firmware.asm", program_name);
 }

@@ -37,11 +37,13 @@
 
 use crate::riscv::assembler;
 use crate::riscv::cpu;
+use crate::riscv::debugger;
 use crate::riscv::memory;
 use crate::riscv::register;
 use std::cell::RefCell;
 use std::fs;
 use std::io;
+use std::io::{BufRead, Write};
 use std::num::ParseIntError;
 use std::path::Path;
 use std::rc::Rc;
@@ -55,14 +57,18 @@ use std::rc::Rc;
 /// 虚拟机配置
 ///
 /// 包含内存大小、调试模式和追踪设置。
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct VMConfig {
     /// Memory size in bytes (内存大小，单位字节)
-    pub(crate) memory_size: memory::Address128,
+    pub memory_size: memory::Address128,
     /// Enable debug output (启用调试输出)
-    pub(crate) debug_mode: bool,
+    pub debug_mode: bool,
     /// Enable execution tracing (启用执行追踪)
-    pub(crate) trace_enabled: bool,
+    pub trace_enabled: bool,
+    /// Enable interactive debugger (启用交互式调试器)
+    pub debugger_enabled: bool,
+    /// Maximum history entries (最大历史记录条目)
+    pub history_size: usize,
     max_cycles: u64,
 }
 
@@ -79,6 +85,7 @@ pub struct VMConfig {
 pub struct VirtualMachine {
     memory: Rc<RefCell<memory::Memory>>,
     cpu: Option<cpu::CPU>,
+    debugger: Option<debugger::InteractiveDebugger>,
     config: VMConfig,
     initialized: bool,
 }
@@ -98,8 +105,30 @@ impl VMConfig {
             memory_size: memory::Memory::DEFAULT_SIZE,
             debug_mode: false,
             trace_enabled: false,
+            debugger_enabled: false,
+            history_size: 1000,
             max_cycles: 0,
         }
+    }
+
+    /// Enables the interactive debugger.
+    ///
+    /// ---
+    ///
+    /// 启用交互式调试器。
+    pub fn with_debugger(mut self) -> Self {
+        self.debugger_enabled = true;
+        self
+    }
+
+    /// Sets the history size.
+    ///
+    /// ---
+    ///
+    /// 设置历史记录大小。
+    pub fn with_history_size(mut self, size: usize) -> Self {
+        self.history_size = size;
+        self
     }
 }
 
@@ -114,10 +143,17 @@ impl VirtualMachine {
     ///
     /// 注意：使用虚拟机前必须调用 `initialize()`。
     pub fn new(config: VMConfig) -> Self {
+        let debugger = if config.debugger_enabled {
+            Some(debugger::InteractiveDebugger::new(config.history_size))
+        } else {
+            None
+        };
+        
         VirtualMachine {
             memory: Rc::new(RefCell::new(memory::Memory::new(config.memory_size))),
             cpu: None,
-            config: config.clone(),
+            debugger,
+            config,
             initialized: false,
         }
     }
@@ -532,5 +568,472 @@ impl VirtualMachine {
 
     pub fn get_config(&self) -> &VMConfig {
         &self.config
+    }
+
+    // ========================================
+    // Debugger Methods / 调试器方法
+    // ========================================
+
+    /// Returns a reference to the debugger, if enabled.
+    ///
+    /// ---
+    ///
+    /// 返回调试器引用（如已启用）。
+    pub fn get_debugger(&self) -> Option<&debugger::InteractiveDebugger> {
+        self.debugger.as_ref()
+    }
+
+    /// Returns a mutable reference to the debugger, if enabled.
+    ///
+    /// ---
+    ///
+    /// 返回调试器的可变引用（如已启用）。
+    pub fn get_debugger_mut(&mut self) -> Option<&mut debugger::InteractiveDebugger> {
+        self.debugger.as_mut()
+    }
+
+    /// Checks if debugger is enabled.
+    ///
+    /// ---
+    ///
+    /// 检查调试器是否启用。
+    pub fn is_debugger_enabled(&self) -> bool {
+        self.debugger.is_some()
+    }
+
+    /// Runs the interactive debugger loop.
+    ///
+    /// This is the main entry point for the debugger.
+    /// Executes until the user quits or the program ends.
+    ///
+    /// ---
+    ///
+    /// 运行交互式调试器循环。
+    ///
+    /// 这是调试器的主入口点。
+    /// 执行直到用户退出或程序结束。
+    pub fn run_debugger(&mut self) {
+        if !self.initialized {
+            eprintln!("VM not initialized");
+            return;
+        }
+
+        if self.debugger.is_none() {
+            eprintln!("Debugger not enabled. Use VMConfig::with_debugger() to enable.");
+            return;
+        }
+
+        println!("RISC-V 128-bit VM Interactive Debugger");
+        println!("Type 'help' or '?' for commands.");
+        println!();
+
+        // Show initial state
+        self.show_debug_state();
+
+        // Start debugger loop
+        self.debugger.as_mut().unwrap().action = debugger::DebuggerAction::Stop;
+
+        let stdin = io::stdin();
+        loop {
+            // Print prompt
+            print!("(riscv) ");
+            io::stdout().flush().unwrap();
+
+            // Read command
+            let mut input = String::new();
+            if stdin.lock().read_line(&mut input).is_err() {
+                break;
+            }
+
+            let input = input.trim();
+            if input.is_empty() {
+                continue;
+            }
+
+            // Parse and execute command
+            let cmd = debugger::CommandParser::parse(input);
+            match cmd {
+                Some(debugger::DebugCommand::Quit) => {
+                    println!("Exiting debugger.");
+                    break;
+                }
+                Some(debugger::DebugCommand::Help) => {
+                    self.debugger.as_mut().unwrap().print_help();
+                }
+                Some(cmd) => {
+                    if !self.execute_debug_command(cmd) {
+                        break;
+                    }
+                }
+                None => {
+                    println!("Unknown command. Type 'help' for help.");
+                }
+            }
+        }
+    }
+
+    /// Executes a single debugger command.
+    ///
+    /// Returns false if the debugger should exit.
+    ///
+    /// ---
+    ///
+    /// 执行单个调试器命令。
+    ///
+    /// 如果调试器应退出则返回 false。
+    fn execute_debug_command(&mut self, cmd: debugger::DebugCommand) -> bool {
+        match cmd {
+            debugger::DebugCommand::Quit => {
+                println!("Exiting debugger.");
+                return false;
+            }
+            debugger::DebugCommand::Help => {
+                self.debugger.as_mut().unwrap().print_help();
+            }
+            debugger::DebugCommand::Continue => {
+                self.debug_continue();
+            }
+            debugger::DebugCommand::Step => {
+                self.debug_step();
+            }
+            debugger::DebugCommand::Next => {
+                self.debug_next();
+            }
+            debugger::DebugCommand::Finish => {
+                self.debug_finish();
+            }
+            debugger::DebugCommand::Until(addr) => {
+                self.debug_until(addr);
+            }
+            debugger::DebugCommand::Break(addr) => {
+                let id = self.debugger.as_mut().unwrap().breakpoints.add_address(addr);
+                println!("Breakpoint {} set at 0x{:016x}", id, addr);
+            }
+            debugger::DebugCommand::TBreak(addr) => {
+                let id = self.debugger.as_mut().unwrap().breakpoints.add_temporary(addr);
+                println!("Temporary breakpoint {} set at 0x{:016x}", id, addr);
+            }
+            debugger::DebugCommand::Delete(Some(id)) => {
+                if self.debugger.as_mut().unwrap().breakpoints.remove(id).is_some() {
+                    println!("Breakpoint {} deleted.", id);
+                } else {
+                    println!("No breakpoint {} found.", id);
+                }
+            }
+            debugger::DebugCommand::Delete(None) => {
+                self.debugger.as_mut().unwrap().breakpoints.clear();
+                println!("All breakpoints deleted.");
+            }
+            debugger::DebugCommand::Enable(id) => {
+                if self.debugger.as_mut().unwrap().breakpoints.enable(id) {
+                    println!("Breakpoint {} enabled.", id);
+                } else {
+                    println!("No breakpoint {} found.", id);
+                }
+            }
+            debugger::DebugCommand::Disable(id) => {
+                if self.debugger.as_mut().unwrap().breakpoints.disable(id) {
+                    println!("Breakpoint {} disabled.", id);
+                } else {
+                    println!("No breakpoint {} found.", id);
+                }
+            }
+            debugger::DebugCommand::Ignore(id, count) => {
+                if let Some(bp) = self.debugger.as_mut().unwrap().breakpoints.get_mut(&id) {
+                    bp.ignore_count = count;
+                    println!("Breakpoint {} will be ignored for {} hits.", id, count);
+                } else {
+                    println!("No breakpoint {} found.", id);
+                }
+            }
+            debugger::DebugCommand::ListBreakpoints => {
+                self.debugger.as_ref().unwrap().show_breakpoints();
+            }
+            debugger::DebugCommand::Watch(addr, size, typ) => {
+                let id = self.debugger.as_mut().unwrap().watchpoints.add_memory(addr, size, typ);
+                println!("Watchpoint {} set at 0x{:016x} ({} bytes)", id, addr, size);
+            }
+            debugger::DebugCommand::WatchReg(reg, is_fp) => {
+                let id = self.debugger.as_mut().unwrap().watchpoints.add_register(reg, is_fp);
+                let reg_type = if is_fp { "fp" } else { "gp" };
+                println!("Register watchpoint {} set on {}r{}", id, reg_type, reg);
+            }
+            debugger::DebugCommand::DeleteWatch(id) => {
+                if self.debugger.as_mut().unwrap().watchpoints.remove(id) {
+                    println!("Watchpoint {} deleted.", id);
+                } else {
+                    println!("No watchpoint {} found.", id);
+                }
+            }
+            debugger::DebugCommand::ListWatchpoints => {
+                self.debugger.as_ref().unwrap().show_watchpoints();
+            }
+            debugger::DebugCommand::PrintRegister(reg) => {
+                if let Some(cpu) = &self.cpu {
+                    let regs = cpu.get_registers();
+                    let reg_index = unsafe { std::mem::transmute::<u8, register::RegisterIndex>(reg) };
+                    let value = regs.read(reg_index);
+                    self.debugger.as_ref().unwrap().show_register(reg, value);
+                }
+            }
+            debugger::DebugCommand::PrintAllRegisters => {
+                if let Some(cpu) = &self.cpu {
+                    let regs = cpu.get_registers();
+                    let mut reg_values = [0u128; 32];
+                    for i in 0..32 {
+                        let reg_index = unsafe { std::mem::transmute::<u8, register::RegisterIndex>(i as u8) };
+                        reg_values[i] = regs.read(reg_index);
+                    }
+                    self.debugger.as_ref().unwrap().show_all_registers(&reg_values, regs.get_pc());
+                }
+            }
+            debugger::DebugCommand::PrintMemory(addr, size) => {
+                let mem = self.memory.borrow();
+                self.debugger.as_ref().unwrap().show_memory(&mem, addr, size);
+            }
+            debugger::DebugCommand::SetRegister(reg, value) => {
+                if let Some(cpu) = &mut self.cpu {
+                    let reg_index = unsafe { std::mem::transmute::<u8, register::RegisterIndex>(reg) };
+                    cpu.get_registers_mut().write(reg_index, value);
+                    println!("x{} set to 0x{:032x}", reg, value);
+                }
+            }
+            debugger::DebugCommand::SetMemory(addr, data) => {
+                self.memory.borrow_mut().write_bytes(addr, &data, data.len());
+                println!("Memory at 0x{:016x} updated.", addr);
+            }
+            debugger::DebugCommand::Disassemble(addr, count) => {
+                let mem = self.memory.borrow();
+                self.debugger.as_ref().unwrap().show_disassembly(&mem, addr, count);
+            }
+            debugger::DebugCommand::History(count) => {
+                self.debugger.as_ref().unwrap().show_history(count);
+            }
+            debugger::DebugCommand::Backtrace => {
+                println!("Backtrace not yet implemented.");
+            }
+            debugger::DebugCommand::Where => {
+                self.show_debug_state();
+            }
+            debugger::DebugCommand::Reset => {
+                self.reset();
+                println!("VM reset.");
+                self.show_debug_state();
+            }
+            debugger::DebugCommand::BreakConditional(addr, condition) => {
+                let id = self.debugger.as_mut().unwrap().breakpoints.add_conditional(addr, condition);
+                println!("Conditional breakpoint {} set at 0x{:016x}", id, addr);
+            }
+            debugger::DebugCommand::Help => {
+                self.debugger.as_ref().unwrap().print_help();
+            }
+            debugger::DebugCommand::Raw(cmd) => {
+                println!("Unknown command: {}. Type 'help' for available commands.", cmd);
+            }
+            _ => {
+                println!("Command not yet implemented.");
+            }
+        }
+        true
+    }
+
+    /// Shows current debug state.
+    ///
+    /// ---
+    ///
+    /// 显示当前调试状态。
+    fn show_debug_state(&self) {
+        if let Some(cpu) = &self.cpu {
+            let pc = cpu.get_registers().get_pc();
+            let instr = cpu.fetch_instruction(pc);
+            let cycle = cpu.get_cycle_count();
+            self.debugger.as_ref().unwrap().show_position(pc, instr, cycle);
+        }
+    }
+
+    /// Continues execution until breakpoint or halt.
+    ///
+    /// ---
+    ///
+    /// 继续执行直到断点或停止。
+    fn debug_continue(&mut self) {
+        if let Some(ref mut cpu) = self.cpu {
+            cpu.start();
+        }
+        self.debugger.as_mut().unwrap().action = debugger::DebuggerAction::Continue;
+
+        loop {
+            if !self.is_running() {
+                println!("Program stopped.");
+                break;
+            }
+
+            // Record history before execution
+            let history_entry = self.record_history_entry();
+
+            // Execute one step
+            if let Some(ref mut cpu) = self.cpu {
+                cpu.step();
+            }
+
+            // Add to history
+            if let Some(entry) = history_entry {
+                self.debugger.as_mut().unwrap().history.add(entry);
+            }
+
+            // Check breakpoints
+            let pc = self.cpu.as_ref().map(|c| c.get_registers().get_pc()).unwrap_or(0);
+            
+            // First check if breakpoint exists and get its info
+            let bp_info = self.debugger.as_mut().unwrap().breakpoints.get_at(pc).map(|bp| {
+                (bp.id, bp.enabled, bp.hit_count, bp.ignore_count, bp.typ.clone())
+            });
+            
+            if let Some((id, enabled, mut hit_count, ignore_count, typ)) = bp_info {
+                hit_count += 1;
+                
+                // Update hit count
+                if let Some(bp) = self.debugger.as_mut().unwrap().breakpoints.get_mut(&id) {
+                    bp.hit_count = hit_count;
+                }
+                
+                if enabled && hit_count > ignore_count {
+                    println!("Breakpoint {} hit at 0x{:016x}", id, pc);
+                    self.show_debug_state();
+
+                    // Remove temporary breakpoint
+                    if matches!(typ, debugger::BreakpointType::Temporary(_)) {
+                        self.debugger.as_mut().unwrap().breakpoints.remove(id);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Executes a single step.
+    ///
+    /// ---
+    ///
+    /// 执行单步。
+    fn debug_step(&mut self) {
+        if !self.is_running() {
+            self.start();
+        }
+
+        // Record history
+        let history_entry = self.record_history_entry();
+
+        // Execute step
+        if let Some(ref mut cpu) = self.cpu {
+            cpu.step();
+        }
+
+        // Add to history
+        if let Some(entry) = history_entry {
+            self.debugger.as_mut().unwrap().history.add(entry);
+        }
+
+        self.show_debug_state();
+    }
+
+    /// Steps over (doesn't enter function calls).
+    ///
+    /// ---
+    ///
+    /// 步过（不进入函数调用）。
+    fn debug_next(&mut self) {
+        if !self.is_running() {
+            self.start();
+        }
+
+        // Get current instruction to check if it's a call
+        let pc = self.cpu.as_ref().map(|c| c.get_registers().get_pc()).unwrap_or(0);
+        let instr = self.memory.borrow().read_32(pc);
+
+        // Simple heuristic: if instruction is JAL or JALR, set temporary breakpoint at next instruction
+        let opcode = instr & 0x7f;
+        let is_call = opcode == 0x6f || opcode == 0x67; // JAL or JALR
+
+        if is_call {
+            // Set temporary breakpoint at next instruction
+            let next_pc = pc + 4;
+            let id = self.debugger.as_mut().unwrap().breakpoints.add_temporary(next_pc);
+            self.debugger.as_mut().unwrap().temp_breakpoint = Some(id);
+            self.debug_continue();
+        } else {
+            self.debug_step();
+        }
+    }
+
+    /// Steps out of current function.
+    ///
+    /// ---
+    ///
+    /// 步出当前函数。
+    fn debug_finish(&mut self) {
+        if !self.is_running() {
+            self.start();
+        }
+
+        // Get return address from ra (x1)
+        let return_addr = if let Some(cpu) = &self.cpu {
+            let regs = cpu.get_registers();
+            let ra_index = unsafe { std::mem::transmute::<u8, register::RegisterIndex>(1) };
+            regs.read(ra_index)
+        } else {
+            0
+        };
+
+        if return_addr == 0 {
+            println!("No return address found.");
+            return;
+        }
+
+        // Set temporary breakpoint at return address
+        let id = self.debugger.as_mut().unwrap().breakpoints.add_temporary(return_addr);
+        self.debugger.as_mut().unwrap().temp_breakpoint = Some(id);
+        println!("Running until return address 0x{:016x}", return_addr);
+        self.debug_continue();
+    }
+
+    /// Runs until a specific address.
+    ///
+    /// ---
+    ///
+    /// 运行到指定地址。
+    fn debug_until(&mut self, addr: memory::Address128) {
+        if !self.is_running() {
+            self.start();
+        }
+
+        let id = self.debugger.as_mut().unwrap().breakpoints.add_temporary(addr);
+        self.debugger.as_mut().unwrap().temp_breakpoint = Some(id);
+        println!("Running until 0x{:016x}", addr);
+        self.debug_continue();
+    }
+
+    /// Records a history entry before execution.
+    ///
+    /// ---
+    ///
+    /// 执行前记录历史条目。
+    fn record_history_entry(&self) -> Option<debugger::HistoryEntry> {
+        if let Some(cpu) = &self.cpu {
+            let regs = cpu.get_registers();
+            let pc = regs.get_pc();
+            let instr = cpu.fetch_instruction(pc);
+            let cycle = cpu.get_cycle_count();
+
+            let mut reg_values = [0u128; 32];
+            for i in 0..32 {
+                let reg_index = unsafe { std::mem::transmute::<u8, register::RegisterIndex>(i as u8) };
+                reg_values[i] = regs.read(reg_index);
+            }
+
+            Some(debugger::HistoryEntry::new(cycle, pc, instr, reg_values, pc))
+        } else {
+            None
+        }
     }
 }

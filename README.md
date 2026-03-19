@@ -9,6 +9,7 @@ A high-performance 128-bit RISC-V virtual machine implemented in Rust, featuring
 - **32 Vector Registers**: Support for V vector extension
 - **Built-in Assembler**: Direct loading and execution of RISC-V assembly code
 - **Flexible Memory System**: Configurable memory size with byte/half-word/word/double-word/quad-word access
+- **Interactive Debugger**: Full-featured debugger with breakpoints, watchpoints, execution history, and step-by-step execution
 - **Debug Support**: Single-step execution, instruction tracing, register state inspection
 - **Exception Handling**: Complete exception capture and reporting mechanism
 
@@ -191,6 +192,8 @@ Options:
   --debug             Enable debug mode
   --trace             Enable execution tracing
   --step              Run in single-step mode
+  -d, --debugger      Start interactive debugger
+  --history <n>       Set execution history size (default: 1000)
   --load-addr <addr>  Set program load address (default: 0x0)
 ```
 
@@ -200,6 +203,52 @@ Options:
 |-----------|--------|
 | .bin, .raw | Raw binary machine code |
 | .s, .asm | RISC-V assembly source (auto-assembled) |
+
+### Interactive Debugger
+
+The interactive debugger provides powerful debugging capabilities:
+
+```
+Debugger Commands:
+  Execution Control:
+    c, continue       Continue execution
+    s, step           Single step (enter function calls)
+    n, next           Step over (skip function calls)
+    finish            Step out of current function
+    u, until <addr>   Run until address
+
+  Breakpoints:
+    b, break <addr>   Set breakpoint at address
+    tb, tbreak <addr> Set temporary breakpoint (removed after hit)
+    d, delete [id]    Delete breakpoint (all if no id)
+    enable <id>       Enable breakpoint
+    disable <id>      Disable breakpoint
+    ignore <id> <n>   Ignore breakpoint for N hits
+    info b            List all breakpoints
+
+  Watchpoints:
+    watch <addr> [size] [type]  Set memory watchpoint
+                                type: r(ead), w(rite), a(ccess)
+    watchreg <reg> [fp]         Watch register (fp for float)
+    dwatch <id>                 Delete watchpoint
+    info w                      List all watchpoints
+
+  Inspection:
+    p, print <$reg>   Print register value
+    p, print <addr> [size]  Print memory contents
+    reg, registers    Print all registers
+    x <addr> [size]   Examine memory
+    disas <addr> [n]  Disassemble N instructions
+
+  History & Navigation:
+    history [n]       Show last N execution history entries
+    where             Show current position and instruction
+    reset             Reset VM to initial state
+
+  Other:
+    help, ?           Show help
+    q, quit           Exit debugger
+```
 
 ### Examples
 
@@ -219,8 +268,14 @@ riscv-128bit-vm --debug --trace program.s
 # Single-step execution
 riscv-128bit-vm --step program.s
 
-# Custom memory size (32MB)
-riscv-128bit-vm --memory 0x2000000 program.bin
+# Start interactive debugger
+riscv-128bit-vm -d program.s
+
+# Custom memory size (32MB) with debugger
+riscv-128bit-vm --memory 0x2000000 -d program.bin
+
+# Set history size for debugger
+riscv-128bit-vm --history 5000 -d program.s
 ```
 
 ## Assembly Language Examples
@@ -369,6 +424,48 @@ while vm.is_running() && !vm.has_exception() {
 }
 ```
 
+### Interactive Debugger
+
+```rust
+use riscv::virtual_machine::{VirtualMachine, VMConfig};
+
+// Create VM with debugger enabled
+let config = VMConfig::new().with_debugger().with_history_size(2000);
+let mut vm = VirtualMachine::new(config);
+vm.initialize();
+
+// Load program
+vm.load_assembly("program.s", 0x0).unwrap();
+
+// Run interactive debugger
+vm.run_debugger();
+```
+
+### Debugger API
+
+```rust
+// Programmatic debugger usage
+if let Some(debugger) = vm.get_debugger_mut() {
+    // Add breakpoint
+    let bp_id = debugger.breakpoints.add_address(0x80000100);
+    
+    // Add conditional breakpoint
+    let cond = debugger::BreakCondition::RegisterEqual { reg: 10, value: 42 };
+    debugger.breakpoints.add_conditional(0x80000200, cond);
+    
+    // Add watchpoint
+    debugger.watchpoints.add_memory(0x1000, 8, debugger::WatchpointType::Write);
+}
+
+// Check and manage breakpoints programmatically
+if let Some(debugger) = vm.get_debugger() {
+    for bp in debugger.breakpoints.list() {
+        println!("Breakpoint {} at 0x{:x}, hits: {}", 
+                 bp.id, bp.address().unwrap_or(0), bp.hit_count);
+    }
+}
+```
+
 ## Project Structure
 
 ```
@@ -384,7 +481,8 @@ riscv-128bit-vm/
         ├── instruction.rs   # Instruction decoder
         ├── executor.rs      # Instruction executor
         ├── virtual_machine.rs # VM interface
-        └── assembler.rs     # Assembler
+        ├── assembler.rs     # Assembler
+        └── debugger.rs      # Interactive debugger
 ```
 
 ## Register Mapping

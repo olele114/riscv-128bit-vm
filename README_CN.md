@@ -9,6 +9,7 @@
 - **32个向量寄存器**: 支持 V 向量扩展
 - **内置汇编器**: 支持直接加载和运行 RISC-V 汇编代码
 - **灵活的内存系统**: 可配置内存大小，支持字节/半字/字/双字/四字访问
+- **交互式调试器**: 功能完整的调试器，支持断点、观察点、执行历史、单步执行
 - **调试支持**: 单步执行、指令追踪、寄存器状态查看
 - **异常处理**: 完整的异常捕获和报告机制
 
@@ -191,6 +192,8 @@ riscv-128bit-vm [options] [program_file]
   --debug             启用调试模式
   --trace             启用执行追踪
   --step              单步执行模式
+  -d, --debugger      启动交互式调试器
+  --history <n>       设置执行历史大小 (默认: 1000)
   --load-addr <addr>  设置程序加载地址 (默认: 0x0)
 ```
 
@@ -200,6 +203,52 @@ riscv-128bit-vm [options] [program_file]
 |--------|------|
 | .bin, .raw | 原始二进制机器码 |
 | .s, .asm | RISC-V 汇编源码 (自动汇编) |
+
+### 交互式调试器
+
+交互式调试器提供强大的调试功能：
+
+```
+调试器命令:
+  执行控制:
+    c, continue       继续执行
+    s, step           单步执行 (进入函数调用)
+    n, next           步过 (跳过函数调用)
+    finish            步出当前函数
+    u, until <addr>   运行到指定地址
+
+  断点:
+    b, break <addr>   在地址设置断点
+    tb, tbreak <addr> 设置临时断点 (触发后删除)
+    d, delete [id]    删除断点 (无 id 时删除全部)
+    enable <id>       启用断点
+    disable <id>      禁用断点
+    ignore <id> <n>   忽略断点 N 次命中
+    info b            列出所有断点
+
+  观察点:
+    watch <addr> [size] [type]  设置内存观察点
+                                type: r(读), w(写), a(访问)
+    watchreg <reg> [fp]         监视寄存器 (fp 表示浮点寄存器)
+    dwatch <id>                 删除观察点
+    info w                      列出所有观察点
+
+  检查:
+    p, print <$reg>   打印寄存器值
+    p, print <addr> [size]  打印内存内容
+    reg, registers    打印所有寄存器
+    x <addr> [size]   检查内存
+    disas <addr> [n]  反汇编 N 条指令
+
+  历史与导航:
+    history [n]       显示最近 N 条执行历史
+    where             显示当前位置和指令
+    reset             重置虚拟机到初始状态
+
+  其他:
+    help, ?           显示帮助
+    q, quit           退出调试器
+```
 
 ### 示例
 
@@ -219,8 +268,14 @@ riscv-128bit-vm --debug --trace program.s
 # 单步执行
 riscv-128bit-vm --step program.s
 
-# 自定义内存大小 (32MB)
-riscv-128bit-vm --memory 0x2000000 program.bin
+# 启动交互式调试器
+riscv-128bit-vm -d program.s
+
+# 自定义内存大小 (32MB) 并启动调试器
+riscv-128bit-vm --memory 0x2000000 -d program.bin
+
+# 设置调试器历史大小
+riscv-128bit-vm --history 5000 -d program.s
 ```
 
 ## 汇编语言示例
@@ -369,6 +424,48 @@ while vm.is_running() && !vm.has_exception() {
 }
 ```
 
+### 交互式调试器
+
+```rust
+use riscv::virtual_machine::{VirtualMachine, VMConfig};
+
+// 创建启用调试器的虚拟机
+let config = VMConfig::new().with_debugger().with_history_size(2000);
+let mut vm = VirtualMachine::new(config);
+vm.initialize();
+
+// 加载程序
+vm.load_assembly("program.s", 0x0).unwrap();
+
+// 运行交互式调试器
+vm.run_debugger();
+```
+
+### 调试器 API
+
+```rust
+// 编程式使用调试器
+if let Some(debugger) = vm.get_debugger_mut() {
+    // 添加断点
+    let bp_id = debugger.breakpoints.add_address(0x80000100);
+    
+    // 添加条件断点
+    let cond = debugger::BreakCondition::RegisterEqual { reg: 10, value: 42 };
+    debugger.breakpoints.add_conditional(0x80000200, cond);
+    
+    // 添加观察点
+    debugger.watchpoints.add_memory(0x1000, 8, debugger::WatchpointType::Write);
+}
+
+// 编程式检查和管理断点
+if let Some(debugger) = vm.get_debugger() {
+    for bp in debugger.breakpoints.list() {
+        println!("断点 {} 在 0x{:x}, 命中次数: {}", 
+                 bp.id, bp.address().unwrap_or(0), bp.hit_count);
+    }
+}
+```
+
 ## 项目结构
 
 ```
@@ -384,7 +481,8 @@ riscv-128bit-vm/
         ├── instruction.rs   # 指令解码器
         ├── executor.rs      # 指令执行器
         ├── virtual_machine.rs # 虚拟机接口
-        └── assembler.rs     # 汇编器
+        ├── assembler.rs     # 汇编器
+        └── debugger.rs      # 交互式调试器
 ```
 
 ## 寄存器映射
