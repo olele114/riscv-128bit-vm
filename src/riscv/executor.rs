@@ -14,6 +14,7 @@
 //! - **U-type**: LUI, AUIPC
 //! - **J-type**: JAL, JALR
 //! - **System**: ECALL, EBREAK
+//! - **M extension**: MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU
 //!
 //! ---
 //!
@@ -32,6 +33,7 @@
 //! - **U-type**: LUI, AUIPC
 //! - **J-type**: JAL, JALR
 //! - **System**: ECALL, EBREAK
+//! - **M 扩展**: MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU
 
 #![allow(dead_code)]
 
@@ -213,21 +215,40 @@ impl Executor {
             }
 
             instruction::OpCode::Reg => {
-                 match decoded.funct3 {
-                     0x0 => if (decoded.funct7 & 0x20) != 0 { Self::execute_sub(cpu, decoded) } else { Self::execute_add(cpu, decoded) },
-                     0x1 => Self::execute_sll(cpu, decoded),
-                     0x2 => Self::execute_slt(cpu, decoded),
-                     0x3 => Self::execute_sltu(cpu, decoded),
-                     0x4 => Self::execute_xor(cpu, decoded),
-                     0x5 => if (decoded.funct7 & 0x20) != 0 { Self::execute_sra(cpu, decoded) } else { Self::execute_srl(cpu, decoded) },
-                     0x6 => Self::execute_or(cpu, decoded),
-                     0x7 => Self::execute_and(cpu, decoded),
-                     _ => {
-                         result.success = false;
-                         result.error_message = "Unknown reg func3".to_string();
-                         result
-                     }
-                 }
+                // Check for M extension instructions (funct7 == 0x01)
+                if decoded.funct7 == 0x01 {
+                    match decoded.funct3 {
+                        0x0 => Self::execute_mul(cpu, decoded),
+                        0x1 => Self::execute_mulh(cpu, decoded),
+                        0x2 => Self::execute_mulhsu(cpu, decoded),
+                        0x3 => Self::execute_mulhu(cpu, decoded),
+                        0x4 => Self::execute_div(cpu, decoded),
+                        0x5 => Self::execute_divu(cpu, decoded),
+                        0x6 => Self::execute_rem(cpu, decoded),
+                        0x7 => Self::execute_remu(cpu, decoded),
+                        _ => {
+                            result.success = false;
+                            result.error_message = "Unknown M extension func3".to_string();
+                            result
+                        }
+                    }
+                } else {
+                    match decoded.funct3 {
+                        0x0 => if (decoded.funct7 & 0x20) != 0 { Self::execute_sub(cpu, decoded) } else { Self::execute_add(cpu, decoded) },
+                        0x1 => Self::execute_sll(cpu, decoded),
+                        0x2 => Self::execute_slt(cpu, decoded),
+                        0x3 => Self::execute_sltu(cpu, decoded),
+                        0x4 => Self::execute_xor(cpu, decoded),
+                        0x5 => if (decoded.funct7 & 0x20) != 0 { Self::execute_sra(cpu, decoded) } else { Self::execute_srl(cpu, decoded) },
+                        0x6 => Self::execute_or(cpu, decoded),
+                        0x7 => Self::execute_and(cpu, decoded),
+                        _ => {
+                            result.success = false;
+                            result.error_message = "Unknown reg func3".to_string();
+                            result
+                        }
+                    }
+                }
             }
 
             instruction::OpCode::System => {
@@ -383,6 +404,220 @@ impl Executor {
         let rd_val = rs1_val & rs2_val;
         Self::set_reg_value(regs, decoded.rd, rd_val);
         result
+    }
+
+    // ========================================
+    // M Extension Instructions / M 扩展指令
+    // ========================================
+
+    /// MUL: Multiply low (乘法低位)
+    ///
+    /// rd = (rs1 * rs2)[127:0]
+    fn execute_mul(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
+        let result = ExecutionResult::new();
+        let regs = cpu.get_registers_mut();
+        let rs1_val = Self::get_reg_value(regs, decoded.rs1) as u128;
+        let rs2_val = Self::get_reg_value(regs, decoded.rs2) as u128;
+        let rd_val = rs1_val.wrapping_mul(rs2_val);
+        Self::set_reg_value(regs, decoded.rd, rd_val as i128);
+        result
+    }
+
+    /// MULH: Multiply high signed (有符号乘法高位)
+    ///
+    /// rd = (rs1 * rs2)[255:128] (both signed)
+    fn execute_mulh(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
+        let result = ExecutionResult::new();
+        let regs = cpu.get_registers_mut();
+        let rs1_val = Self::get_reg_value(regs, decoded.rs1);
+        let rs2_val = Self::get_reg_value(regs, decoded.rs2);
+        // Compute high 128 bits of signed multiplication
+        let rd_val = Self::mulh_signed(rs1_val, rs2_val);
+        Self::set_reg_value(regs, decoded.rd, rd_val);
+        result
+    }
+
+    /// MULHSU: Multiply high signed-unsigned (有符号-无符号乘法高位)
+    ///
+    /// rd = (rs1 * rs2)[255:128] (rs1 signed, rs2 unsigned)
+    fn execute_mulhsu(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
+        let result = ExecutionResult::new();
+        let regs = cpu.get_registers_mut();
+        let rs1_val = Self::get_reg_value(regs, decoded.rs1);
+        let rs2_val = Self::get_reg_value(regs, decoded.rs2) as u128;
+        // Compute high 128 bits of signed * unsigned multiplication
+        let rd_val = Self::mulh_su(rs1_val, rs2_val);
+        Self::set_reg_value(regs, decoded.rd, rd_val);
+        result
+    }
+
+    /// MULHU: Multiply high unsigned (无符号乘法高位)
+    ///
+    /// rd = (rs1 * rs2)[255:128] (both unsigned)
+    fn execute_mulhu(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
+        let result = ExecutionResult::new();
+        let regs = cpu.get_registers_mut();
+        let rs1_val = Self::get_reg_value(regs, decoded.rs1) as u128;
+        let rs2_val = Self::get_reg_value(regs, decoded.rs2) as u128;
+        // Compute high 128 bits of unsigned multiplication
+        let rd_val = Self::mulh_unsigned(rs1_val, rs2_val);
+        Self::set_reg_value(regs, decoded.rd, rd_val as i128);
+        result
+    }
+
+    /// DIV: Divide signed (有符号除法)
+    ///
+    /// rd = rs1 / rs2 (signed)
+    /// Special cases:
+    /// - Division by zero: rd = -1
+    /// - Overflow (INT128_MIN / -1): rd = INT128_MIN
+    fn execute_div(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
+        let result = ExecutionResult::new();
+        let regs = cpu.get_registers_mut();
+        let rs1_val = Self::get_reg_value(regs, decoded.rs1);
+        let rs2_val = Self::get_reg_value(regs, decoded.rs2);
+
+        let rd_val = if rs2_val == 0 {
+            // Division by zero returns -1
+            -1i128
+        } else if rs1_val == i128::MIN && rs2_val == -1 {
+            // Overflow case: INT128_MIN / -1 = INT128_MIN
+            i128::MIN
+        } else {
+            rs1_val / rs2_val
+        };
+        Self::set_reg_value(regs, decoded.rd, rd_val);
+        result
+    }
+
+    /// DIVU: Divide unsigned (无符号除法)
+    ///
+    /// rd = rs1 / rs2 (unsigned)
+    /// Special case: Division by zero returns 2^128 - 1
+    fn execute_divu(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
+        let result = ExecutionResult::new();
+        let regs = cpu.get_registers_mut();
+        let rs1_val = Self::get_reg_value(regs, decoded.rs1) as u128;
+        let rs2_val = Self::get_reg_value(regs, decoded.rs2) as u128;
+
+        let rd_val = if rs2_val == 0 {
+            // Division by zero returns 2^128 - 1 (all ones)
+            u128::MAX
+        } else {
+            rs1_val / rs2_val
+        };
+        Self::set_reg_value(regs, decoded.rd, rd_val as i128);
+        result
+    }
+
+    /// REM: Remainder signed (有符号取余)
+    ///
+    /// rd = rs1 % rs2 (signed)
+    /// Special cases:
+    /// - Division by zero: rd = rs1
+    /// - Overflow (INT128_MIN % -1): rd = 0
+    fn execute_rem(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
+        let result = ExecutionResult::new();
+        let regs = cpu.get_registers_mut();
+        let rs1_val = Self::get_reg_value(regs, decoded.rs1);
+        let rs2_val = Self::get_reg_value(regs, decoded.rs2);
+
+        let rd_val = if rs2_val == 0 {
+            // Division by zero returns rs1
+            rs1_val
+        } else if rs1_val == i128::MIN && rs2_val == -1 {
+            // Overflow case: INT128_MIN % -1 = 0
+            0
+        } else {
+            rs1_val % rs2_val
+        };
+        Self::set_reg_value(regs, decoded.rd, rd_val);
+        result
+    }
+
+    /// REMU: Remainder unsigned (无符号取余)
+    ///
+    /// rd = rs1 % rs2 (unsigned)
+    /// Special case: Division by zero returns rs1
+    fn execute_remu(cpu: &mut cpu::CPU, decoded: &instruction::DecodedInstruction) -> ExecutionResult {
+        let result = ExecutionResult::new();
+        let regs = cpu.get_registers_mut();
+        let rs1_val = Self::get_reg_value(regs, decoded.rs1) as u128;
+        let rs2_val = Self::get_reg_value(regs, decoded.rs2) as u128;
+
+        let rd_val = if rs2_val == 0 {
+            // Division by zero returns rs1
+            rs1_val
+        } else {
+            rs1_val % rs2_val
+        };
+        Self::set_reg_value(regs, decoded.rd, rd_val as i128);
+        result
+    }
+
+    // ========================================
+    // Helper functions for M extension / M 扩展辅助函数
+    // ========================================
+
+    /// Computes high 128 bits of unsigned 128x128 multiplication.
+    /// 
+    /// 计算无符号 128x128 乘法的高 128 位。
+    fn mulh_unsigned(a: u128, b: u128) -> u128 {
+        // Split into high and low 64-bit parts
+        let a_lo = a as u64 as u128;
+        let a_hi = (a >> 64) as u64 as u128;
+        let b_lo = b as u64 as u128;
+        let b_hi = (b >> 64) as u64 as u128;
+
+        // Compute partial products
+        let lo_lo = a_lo * b_lo;
+        let hi_lo = a_hi * b_lo;
+        let lo_hi = a_lo * b_hi;
+        let hi_hi = a_hi * b_hi;
+
+        // Compute the middle sum with carry
+        let mid = (lo_lo >> 64) + (hi_lo & ((1u128 << 64) - 1)) + (lo_hi & ((1u128 << 64) - 1));
+        let carry = (mid >> 64) + (hi_lo >> 64) + (lo_hi >> 64);
+
+        // High 128 bits
+        hi_hi + carry
+    }
+
+    /// Computes high 128 bits of signed 128x128 multiplication.
+    /// 
+    /// 计算有符号 128x128 乘法的高 128 位。
+    fn mulh_signed(a: i128, b: i128) -> i128 {
+        // Convert to unsigned, compute unsigned high bits
+        let a_unsigned = a as u128;
+        let b_unsigned = b as u128;
+        
+        let mut result = Self::mulh_unsigned(a_unsigned, b_unsigned);
+        
+        // Adjust for negative operands
+        if a < 0 {
+            result = result.wrapping_sub(b_unsigned);
+        }
+        if b < 0 {
+            result = result.wrapping_sub(a_unsigned);
+        }
+        
+        result as i128
+    }
+
+    /// Computes high 128 bits of signed * unsigned 128x128 multiplication.
+    /// 
+    /// 计算有符号 * 无符号 128x128 乘法的高 128 位。
+    fn mulh_su(a: i128, b: u128) -> i128 {
+        let a_unsigned = a as u128;
+        
+        let mut result = Self::mulh_unsigned(a_unsigned, b);
+        
+        // Adjust for negative signed operand
+        if a < 0 {
+            result = result.wrapping_sub(b);
+        }
+        
+        result as i128
     }
 
     // ========================================

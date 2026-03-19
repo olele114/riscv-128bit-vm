@@ -581,22 +581,37 @@ impl InstructionDecoder {
             }
 
             OpCode::Reg => {
-                match decoded.funct3 {
-                    0x0 => {
-                        if (decoded.funct7 & 0x20) != 0 {
-                            "SUB"
-                        } else {
-                            "ADD"
-                        }
-                    },
-                    0x1 => "SLL",
-                    0x2 => "SLT",
-                    0x3 => "SLTU",
-                    0x4 => "XOR",
-                    0x5 => if (decoded.funct7 & 0x20) != 0 {"SRA"} else {"SRL"},
-                    0x6 => "OR",
-                    0x7 => "AND",
-                    _ => "R_UNKNOWN",
+                // Check for M extension instructions (funct7 == 0x01)
+                if decoded.funct7 == 0x01 {
+                    match decoded.funct3 {
+                        0x0 => "MUL",
+                        0x1 => "MULH",
+                        0x2 => "MULHSU",
+                        0x3 => "MULHU",
+                        0x4 => "DIV",
+                        0x5 => "DIVU",
+                        0x6 => "REM",
+                        0x7 => "REMU",
+                        _ => "M_UNKNOWN",
+                    }
+                } else {
+                    match decoded.funct3 {
+                        0x0 => {
+                            if (decoded.funct7 & 0x20) != 0 {
+                                "SUB"
+                            } else {
+                                "ADD"
+                            }
+                        },
+                        0x1 => "SLL",
+                        0x2 => "SLT",
+                        0x3 => "SLTU",
+                        0x4 => "XOR",
+                        0x5 => if (decoded.funct7 & 0x20) != 0 {"SRA"} else {"SRL"},
+                        0x6 => "OR",
+                        0x7 => "AND",
+                        _ => "R_UNKNOWN",
+                    }
                 }
             }
 
