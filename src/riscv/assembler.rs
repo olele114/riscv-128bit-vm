@@ -57,6 +57,7 @@
 
 use std::collections::HashMap;
 use std::io::{self, BufRead};
+use crate::riscv::register;
 
 /// Assembly error with line number and message.
 ///
@@ -625,6 +626,142 @@ impl Assembler {
             "ecall" => Ok(0x00000073),
             "ebreak" => Ok(0x00100073),
             
+            // A extension: Atomic operations
+            "lr.d" => self.encode_lr(&parts, false),
+            "lr.d.aq" => self.encode_lr(&parts, true),
+            "sc.d" => self.encode_sc(&parts, false),
+            "sc.d.aq" => self.encode_sc(&parts, true),
+            "amoadd.d" => self.encode_amo(&parts, 0x00, false, false),
+            "amoadd.d.aq" => self.encode_amo(&parts, 0x00, true, false),
+            "amoadd.d.rl" => self.encode_amo(&parts, 0x00, false, true),
+            "amoadd.d.aqrl" => self.encode_amo(&parts, 0x00, true, true),
+            "amoswap.d" => self.encode_amo(&parts, 0x01, false, false),
+            "amoswap.d.aq" => self.encode_amo(&parts, 0x01, true, false),
+            "amoswap.d.rl" => self.encode_amo(&parts, 0x01, false, true),
+            "amoswap.d.aqrl" => self.encode_amo(&parts, 0x01, true, true),
+            "amoand.d" => self.encode_amo(&parts, 0x0c, false, false),
+            "amoand.d.aq" => self.encode_amo(&parts, 0x0c, true, false),
+            "amoand.d.rl" => self.encode_amo(&parts, 0x0c, false, true),
+            "amoand.d.aqrl" => self.encode_amo(&parts, 0x0c, true, true),
+            "amoor.d" => self.encode_amo(&parts, 0x0a, false, false),
+            "amoor.d.aq" => self.encode_amo(&parts, 0x0a, true, false),
+            "amoor.d.rl" => self.encode_amo(&parts, 0x0a, false, true),
+            "amoor.d.aqrl" => self.encode_amo(&parts, 0x0a, true, true),
+            "amoxor.d" => self.encode_amo(&parts, 0x04, false, false),
+            "amoxor.d.aq" => self.encode_amo(&parts, 0x04, true, false),
+            "amoxor.d.rl" => self.encode_amo(&parts, 0x04, false, true),
+            "amoxor.d.aqrl" => self.encode_amo(&parts, 0x04, true, true),
+            "amomax.d" => self.encode_amo(&parts, 0x18, false, false),
+            "amomax.d.aq" => self.encode_amo(&parts, 0x18, true, false),
+            "amomax.d.rl" => self.encode_amo(&parts, 0x18, false, true),
+            "amomax.d.aqrl" => self.encode_amo(&parts, 0x18, true, true),
+            "amomaxu.d" => self.encode_amo(&parts, 0x1c, false, false),
+            "amomaxu.d.aq" => self.encode_amo(&parts, 0x1c, true, false),
+            "amomaxu.d.rl" => self.encode_amo(&parts, 0x1c, false, true),
+            "amomaxu.d.aqrl" => self.encode_amo(&parts, 0x1c, true, true),
+            "amomin.d" => self.encode_amo(&parts, 0x10, false, false),
+            "amomin.d.aq" => self.encode_amo(&parts, 0x10, true, false),
+            "amomin.d.rl" => self.encode_amo(&parts, 0x10, false, true),
+            "amomin.d.aqrl" => self.encode_amo(&parts, 0x10, true, true),
+            "amominu.d" => self.encode_amo(&parts, 0x14, false, false),
+            "amominu.d.aq" => self.encode_amo(&parts, 0x14, true, false),
+            "amominu.d.rl" => self.encode_amo(&parts, 0x14, false, true),
+            "amominu.d.aqrl" => self.encode_amo(&parts, 0x14, true, true),
+            
+            // F extension: Floating-point load/store (single precision)
+            "flw" => self.encode_fp_load(&parts, 0x2),
+            "fsw" => self.encode_fp_store(&parts, 0x2),
+            // D extension: Floating-point load/store (double precision)
+            "fld" => self.encode_fp_load(&parts, 0x3),
+            "fsd" => self.encode_fp_store(&parts, 0x3),
+            // Q extension: Floating-point load/store (quad precision)
+            "flq" => self.encode_fp_load(&parts, 0x4),
+            "fsq" => self.encode_fp_store(&parts, 0x4),
+            
+            // F extension: Floating-point arithmetic (single precision)
+            "fadd.s" => self.encode_fp_r_type(&parts, 0x00, 0),
+            "fsub.s" => self.encode_fp_r_type(&parts, 0x04, 0),
+            "fmul.s" => self.encode_fp_r_type(&parts, 0x08, 0),
+            "fdiv.s" => self.encode_fp_r_type(&parts, 0x0c, 0),
+            "fsqrt.s" => self.encode_fp_sqrt(&parts, 0),
+            "fsgnj.s" => self.encode_fp_r_type_funct3(&parts, 0x10, 0, 0x0),
+            "fsgnjn.s" => self.encode_fp_r_type_funct3(&parts, 0x10, 0, 0x1),
+            "fsgnjx.s" => self.encode_fp_r_type_funct3(&parts, 0x10, 0, 0x2),
+            "fmin.s" => self.encode_fp_r_type_funct3(&parts, 0x05, 0, 0x0),
+            "fmax.s" => self.encode_fp_r_type_funct3(&parts, 0x05, 0, 0x1),
+            "fcvt.w.s" => self.encode_fp_cvt_int(&parts, 0x00, 0),
+            "fcvt.wu.s" => self.encode_fp_cvt_int(&parts, 0x04, 0),
+            "fcvt.l.s" => self.encode_fp_cvt_int(&parts, 0x08, 0),
+            "fcvt.lu.s" => self.encode_fp_cvt_int(&parts, 0x0c, 0),
+            "fcvt.s.w" => self.encode_fp_cvt_int(&parts, 0x10, 0),
+            "fcvt.s.wu" => self.encode_fp_cvt_int(&parts, 0x14, 0),
+            "fcvt.s.l" => self.encode_fp_cvt_int(&parts, 0x18, 0),
+            "fcvt.s.lu" => self.encode_fp_cvt_int(&parts, 0x1c, 0),
+            "fmv.x.s" => self.encode_fp_mvx(&parts, 0),
+            "fmv.s.x" => self.encode_fp_mv_x(&parts, 0),
+            "feq.s" => self.encode_fp_cmp(&parts, 0, 0x2),
+            "flt.s" => self.encode_fp_cmp(&parts, 0, 0x1),
+            "fle.s" => self.encode_fp_cmp(&parts, 0, 0x0),
+            "fclass.s" => self.encode_fp_class(&parts, 0),
+            
+            // D extension: Floating-point arithmetic (double precision)
+            "fadd.d" => self.encode_fp_r_type(&parts, 0x00, 1),
+            "fsub.d" => self.encode_fp_r_type(&parts, 0x04, 1),
+            "fmul.d" => self.encode_fp_r_type(&parts, 0x08, 1),
+            "fdiv.d" => self.encode_fp_r_type(&parts, 0x0c, 1),
+            "fsqrt.d" => self.encode_fp_sqrt(&parts, 1),
+            "fsgnj.d" => self.encode_fp_r_type_funct3(&parts, 0x10, 1, 0x0),
+            "fsgnjn.d" => self.encode_fp_r_type_funct3(&parts, 0x10, 1, 0x1),
+            "fsgnjx.d" => self.encode_fp_r_type_funct3(&parts, 0x10, 1, 0x2),
+            "fmin.d" => self.encode_fp_r_type_funct3(&parts, 0x05, 1, 0x0),
+            "fmax.d" => self.encode_fp_r_type_funct3(&parts, 0x05, 1, 0x1),
+            "fcvt.w.d" => self.encode_fp_cvt_int(&parts, 0x01, 1),
+            "fcvt.wu.d" => self.encode_fp_cvt_int(&parts, 0x05, 1),
+            "fcvt.l.d" => self.encode_fp_cvt_int(&parts, 0x09, 1),
+            "fcvt.lu.d" => self.encode_fp_cvt_int(&parts, 0x0d, 1),
+            "fcvt.d.w" => self.encode_fp_cvt_int(&parts, 0x11, 1),
+            "fcvt.d.wu" => self.encode_fp_cvt_int(&parts, 0x15, 1),
+            "fcvt.d.l" => self.encode_fp_cvt_int(&parts, 0x19, 1),
+            "fcvt.d.lu" => self.encode_fp_cvt_int(&parts, 0x1d, 1),
+            "fmv.x.d" => self.encode_fp_mvx(&parts, 1),
+            "fmv.d.x" => self.encode_fp_mv_x(&parts, 1),
+            "feq.d" => self.encode_fp_cmp(&parts, 1, 0x2),
+            "flt.d" => self.encode_fp_cmp(&parts, 1, 0x1),
+            "fle.d" => self.encode_fp_cmp(&parts, 1, 0x0),
+            "fclass.d" => self.encode_fp_class(&parts, 1),
+            "fcvt.d.s" => self.encode_fp_cvt_fp(&parts, 0, 1),  // S -> D
+            "fcvt.s.d" => self.encode_fp_cvt_fp(&parts, 1, 0),  // D -> S
+            
+            // Q extension: Floating-point arithmetic (quad precision)
+            "fadd.q" => self.encode_fp_r_type(&parts, 0x00, 3),
+            "fsub.q" => self.encode_fp_r_type(&parts, 0x04, 3),
+            "fmul.q" => self.encode_fp_r_type(&parts, 0x08, 3),
+            "fdiv.q" => self.encode_fp_r_type(&parts, 0x0c, 3),
+            "fsqrt.q" => self.encode_fp_sqrt(&parts, 3),
+            "fsgnj.q" => self.encode_fp_r_type_funct3(&parts, 0x10, 3, 0x0),
+            "fsgnjn.q" => self.encode_fp_r_type_funct3(&parts, 0x10, 3, 0x1),
+            "fsgnjx.q" => self.encode_fp_r_type_funct3(&parts, 0x10, 3, 0x2),
+            "fmin.q" => self.encode_fp_r_type_funct3(&parts, 0x05, 3, 0x0),
+            "fmax.q" => self.encode_fp_r_type_funct3(&parts, 0x05, 3, 0x1),
+            "fcvt.w.q" => self.encode_fp_cvt_int(&parts, 0x03, 3),
+            "fcvt.wu.q" => self.encode_fp_cvt_int(&parts, 0x07, 3),
+            "fcvt.l.q" => self.encode_fp_cvt_int(&parts, 0x0b, 3),
+            "fcvt.lu.q" => self.encode_fp_cvt_int(&parts, 0x0f, 3),
+            "fcvt.q.w" => self.encode_fp_cvt_int(&parts, 0x13, 3),
+            "fcvt.q.wu" => self.encode_fp_cvt_int(&parts, 0x17, 3),
+            "fcvt.q.l" => self.encode_fp_cvt_int(&parts, 0x1b, 3),
+            "fcvt.q.lu" => self.encode_fp_cvt_int(&parts, 0x1f, 3),
+            "fmv.x.q" => self.encode_fp_mvx(&parts, 3),
+            "fmv.q.x" => self.encode_fp_mv_x(&parts, 3),
+            "feq.q" => self.encode_fp_cmp(&parts, 3, 0x2),
+            "flt.q" => self.encode_fp_cmp(&parts, 3, 0x1),
+            "fle.q" => self.encode_fp_cmp(&parts, 3, 0x0),
+            "fclass.q" => self.encode_fp_class(&parts, 3),
+            "fcvt.q.s" => self.encode_fp_cvt_fp(&parts, 0, 3),  // S -> Q
+            "fcvt.s.q" => self.encode_fp_cvt_fp(&parts, 3, 0),  // Q -> S
+            "fcvt.q.d" => self.encode_fp_cvt_fp(&parts, 1, 3),  // D -> Q
+            "fcvt.d.q" => self.encode_fp_cvt_fp(&parts, 3, 1),  // Q -> D
+            
             _ => Err(format!("Unknown instruction: {}", mnemonic)),
         }
     }
@@ -917,6 +1054,301 @@ impl Assembler {
         Ok(((funct7 as u32) << 25) | ((rs2 as u32) << 20) | ((rs1 as u32) << 15) | ((funct3 as u32) << 12) | ((rd as u32) << 7) | 0x33)
     }
 
+    // ========================================
+    // A Extension Encoding Functions / A 扩展编码函数
+    // ========================================
+
+    /// Encodes LR.D (Load Reserved Doubleword)
+    /// Format: lr.d rd, (rs1)
+    fn encode_lr(&self, parts: &[String], aq: bool) -> Result<u32, String> {
+        if parts.len() < 3 {
+            return Err("LR.D requires rd and (rs1)".to_string());
+        }
+        
+        let rd = Self::parse_register(&parts[1])?;
+        let rs1_str = parts[2].trim_start_matches('(').trim_end_matches(')');
+        let rs1 = Self::parse_register(rs1_str)?;
+        
+        // funct5 = 0x02 (LR), funct3 = 0x2, rs2 = 0
+        // funct7 = (funct5 << 2) | (aq << 1) | rl
+        let funct7 = (0x02u32 << 2) | (if aq { 0b10 } else { 0 });
+        
+        Ok((funct7 << 25) | (0u32 << 20) | ((rs1 as u32) << 15) | (0x2u32 << 12) | ((rd as u32) << 7) | 0x2f)
+    }
+
+    /// Encodes SC.D (Store Conditional Doubleword)
+    /// Format: sc.d rd, rs2, (rs1)
+    fn encode_sc(&self, parts: &[String], aq: bool) -> Result<u32, String> {
+        if parts.len() < 3 {
+            return Err("SC.D requires rd, rs2, and (rs1)".to_string());
+        }
+        
+        let rd = Self::parse_register(&parts[1])?;
+        
+        // Parse rs2 and (rs1)
+        // Format can be: sc.d rd, rs2, (rs1) or sc.d rd, rs2, rs1
+        let rs2 = Self::parse_register(&parts[2])?;
+        let rs1 = if parts.len() >= 4 {
+            let rs1_str = parts[3].trim_start_matches('(').trim_end_matches(')');
+            Self::parse_register(rs1_str)?
+        } else {
+            return Err("SC.D requires rs1 address".to_string());
+        };
+        
+        // funct5 = 0x03 (SC), funct3 = 0x2
+        let funct7 = (0x03u32 << 2) | (if aq { 0b10 } else { 0 });
+        
+        Ok((funct7 << 25) | ((rs2 as u32) << 20) | ((rs1 as u32) << 15) | (0x2u32 << 12) | ((rd as u32) << 7) | 0x2f)
+    }
+
+    /// Encodes AMO (Atomic Memory Operation) instructions
+    /// Format: amo*.d rd, rs2, (rs1)
+    fn encode_amo(&self, parts: &[String], funct5: u8, aq: bool, rl: bool) -> Result<u32, String> {
+        if parts.len() < 4 {
+            return Err("AMO instruction requires rd, rs2, and (rs1)".to_string());
+        }
+        
+        let rd = Self::parse_register(&parts[1])?;
+        let rs2 = Self::parse_register(&parts[2])?;
+        let rs1_str = parts[3].trim_start_matches('(').trim_end_matches(')');
+        let rs1 = Self::parse_register(rs1_str)?;
+        
+        // funct7 = (funct5 << 2) | (aq << 1) | rl
+        let funct7 = ((funct5 as u32) << 2) | (if aq { 0b10 } else { 0 }) | (if rl { 1 } else { 0 });
+        
+        Ok((funct7 << 25) | ((rs2 as u32) << 20) | ((rs1 as u32) << 15) | (0x2u32 << 12) | ((rd as u32) << 7) | 0x2f)
+    }
+
+    // ========================================
+    // F/D/Q Extension Encoding Functions
+    // ========================================
+
+    /// Parses a floating-point register (f0-f31)
+    fn parse_fp_register(reg: &str) -> Result<u8, String> {
+        let reg = reg.trim();
+        if reg.starts_with('f') {
+            let num_str = &reg[1..];
+            num_str.parse::<u8>().map_err(|_| format!("Invalid FP register: {}", reg))
+        } else {
+            Err(format!("Invalid FP register: {}", reg))
+        }
+    }
+
+    /// Encodes floating-point load (FLW, FLD, FLQ)
+    /// Format: flw/fld/flq fd, offset(rs1)
+    fn encode_fp_load(&self, parts: &[String], funct3: u8) -> Result<u32, String> {
+        if parts.len() < 3 {
+            return Err("FP load requires fd and memory operand".to_string());
+        }
+        
+        let rd = Self::parse_fp_register(&parts[1])?;
+        
+        let offset_end = parts[2].find('(').ok_or("Invalid memory operand")?;
+        let offset_str = &parts[2][..offset_end];
+        let rs1_end = parts[2].find(')').ok_or("Invalid memory operand")?;
+        let rs1_str = &parts[2][offset_end + 1..rs1_end];
+        
+        let rs1 = Self::parse_register(rs1_str)?;
+        let imm = self.parse_immediate(offset_str)?;
+        
+        if imm < -2048 || imm > 2047 {
+            return Err("Offset out of range for FP load".to_string());
+        }
+        
+        let imm_bits = (imm as u16) as u32;
+        // opcode 0x07 for FP load
+        Ok((imm_bits << 20) | ((rs1 as u32) << 15) | ((funct3 as u32) << 12) | ((rd as u32) << 7) | 0x07)
+    }
+
+    /// Encodes floating-point store (FSW, FSD, FSQ)
+    /// Format: fsw/fsd/fsq fs2, offset(rs1)
+    fn encode_fp_store(&self, parts: &[String], funct3: u8) -> Result<u32, String> {
+        if parts.len() < 3 {
+            return Err("FP store requires fs2 and memory operand".to_string());
+        }
+        
+        let rs2 = Self::parse_fp_register(&parts[1])?;
+        
+        let offset_end = parts[2].find('(').ok_or("Invalid memory operand")?;
+        let offset_str = &parts[2][..offset_end];
+        let rs1_end = parts[2].find(')').ok_or("Invalid memory operand")?;
+        let rs1_str = &parts[2][offset_end + 1..rs1_end];
+        
+        let rs1 = Self::parse_register(rs1_str)?;
+        let imm = self.parse_immediate(offset_str)?;
+        
+        if imm < -2048 || imm > 2047 {
+            return Err("Offset out of range for FP store".to_string());
+        }
+        
+        let imm_bits = (imm as u16) as u32;
+        let imm_11_5 = (imm_bits >> 5) & 0x7f;
+        let imm_4_0 = imm_bits & 0x1f;
+        // opcode 0x27 for FP store
+        Ok((imm_11_5 << 25) | ((rs2 as u32) << 20) | ((rs1 as u32) << 15) | ((funct3 as u32) << 12) | (imm_4_0 << 7) | 0x27)
+    }
+
+    /// Encodes floating-point R-type instructions (FADD, FSUB, FMUL, FDIV)
+    /// Format: fadd.s fd, fs1, fs2
+    fn encode_fp_r_type(&self, parts: &[String], funct5: u8, fmt: u8) -> Result<u32, String> {
+        if parts.len() < 4 {
+            return Err("FP R-type requires fd, fs1, fs2".to_string());
+        }
+        
+        let rd = Self::parse_fp_register(&parts[1])?;
+        let rs1 = Self::parse_fp_register(&parts[2])?;
+        let rs2 = Self::parse_fp_register(&parts[3])?;
+        
+        // funct7 = (funct5 << 2) | fmt
+        let funct7 = ((funct5 as u32) << 2) | (fmt as u32);
+        
+        // opcode 0x53 for FP compute
+        Ok((funct7 << 25) | ((rs2 as u32) << 20) | ((rs1 as u32) << 15) | (0x0u32 << 12) | ((rd as u32) << 7) | 0x53)
+    }
+
+    /// Encodes floating-point R-type instructions with funct3 (FSGNJ, FMIN/FMAX)
+    /// Format: fsgnj.s fd, fs1, fs2
+    fn encode_fp_r_type_funct3(&self, parts: &[String], funct5: u8, fmt: u8, funct3: u8) -> Result<u32, String> {
+        if parts.len() < 4 {
+            return Err("FP R-type requires fd, fs1, fs2".to_string());
+        }
+        
+        let rd = Self::parse_fp_register(&parts[1])?;
+        let rs1 = Self::parse_fp_register(&parts[2])?;
+        let rs2 = Self::parse_fp_register(&parts[3])?;
+        
+        // funct7 = (funct5 << 2) | fmt
+        let funct7 = ((funct5 as u32) << 2) | (fmt as u32);
+        
+        Ok((funct7 << 25) | ((rs2 as u32) << 20) | ((rs1 as u32) << 15) | ((funct3 as u32) << 12) | ((rd as u32) << 7) | 0x53)
+    }
+
+    /// Encodes FSQRT instruction
+    /// Format: fsqrt.s fd, fs1
+    fn encode_fp_sqrt(&self, parts: &[String], fmt: u8) -> Result<u32, String> {
+        if parts.len() < 3 {
+            return Err("FSQRT requires fd, fs1".to_string());
+        }
+        
+        let rd = Self::parse_fp_register(&parts[1])?;
+        let rs1 = Self::parse_fp_register(&parts[2])?;
+        
+        // funct5 = 0x0b for FSQRT
+        let funct7 = (0x0bu32 << 2) | (fmt as u32);
+        
+        Ok((funct7 << 25) | (0u32 << 20) | ((rs1 as u32) << 15) | (0x0u32 << 12) | ((rd as u32) << 7) | 0x53)
+    }
+
+    /// Encodes FCVT between floating-point and integer
+    /// Format: fcvt.w.s rd, fs1
+    fn encode_fp_cvt_int(&self, parts: &[String], rs2_val: u8, fmt: u8) -> Result<u32, String> {
+        if parts.len() < 3 {
+            return Err("FCVT requires rd/fs1".to_string());
+        }
+        
+        // Check if this is FP->Int or Int->FP conversion
+        let is_fp_to_int = rs2_val < 0x10;
+        
+        let (rd, rs1) = if is_fp_to_int {
+            // FP to Int: fcvt.w.s x?, f?
+            let rd = Self::parse_register(&parts[1])?;
+            let rs1 = Self::parse_fp_register(&parts[2])?;
+            (rd, rs1)
+        } else {
+            // Int to FP: fcvt.s.w f?, x?
+            let rd = Self::parse_fp_register(&parts[1])?;
+            let rs1 = Self::parse_register(&parts[2])?;
+            (rd, rs1)
+        };
+        
+        // funct5 = 0x18 for FCVT to/from int
+        let funct7 = (0x18u32 << 2) | (fmt as u32);
+        
+        Ok((funct7 << 25) | ((rs2_val as u32) << 20) | ((rs1 as u32) << 15) | (0x1u32 << 12) | ((rd as u32) << 7) | 0x53)
+    }
+
+    /// Encodes FMV.X.S/D/Q (move from FP register to integer register)
+    /// Format: fmv.x.s rd, fs1
+    fn encode_fp_mvx(&self, parts: &[String], fmt: u8) -> Result<u32, String> {
+        if parts.len() < 3 {
+            return Err("FMV.X requires rd, fs1".to_string());
+        }
+        
+        let rd = Self::parse_register(&parts[1])?;
+        let rs1 = Self::parse_fp_register(&parts[2])?;
+        
+        // funct5 = 0x1c, rs2 = 0
+        let funct7 = (0x1cu32 << 2) | (fmt as u32);
+        
+        Ok((funct7 << 25) | (0u32 << 20) | ((rs1 as u32) << 15) | (0x0u32 << 12) | ((rd as u32) << 7) | 0x53)
+    }
+
+    /// Encodes FMV.S/D/Q.X (move from integer register to FP register)
+    /// Format: fmv.s.x fd, rs1
+    fn encode_fp_mv_x(&self, parts: &[String], fmt: u8) -> Result<u32, String> {
+        if parts.len() < 3 {
+            return Err("FMV.X requires fd, rs1".to_string());
+        }
+        
+        let rd = Self::parse_fp_register(&parts[1])?;
+        let rs1 = Self::parse_register(&parts[2])?;
+        
+        // funct5 = 0x1e
+        let funct7 = (0x1eu32 << 2) | (fmt as u32);
+        
+        Ok((funct7 << 25) | (0u32 << 20) | ((rs1 as u32) << 15) | (0x0u32 << 12) | ((rd as u32) << 7) | 0x53)
+    }
+
+    /// Encodes FP compare instructions (FEQ, FLT, FLE)
+    /// Format: feq.s rd, fs1, fs2
+    fn encode_fp_cmp(&self, parts: &[String], fmt: u8, funct3: u8) -> Result<u32, String> {
+        if parts.len() < 4 {
+            return Err("FP compare requires rd, fs1, fs2".to_string());
+        }
+        
+        let rd = Self::parse_register(&parts[1])?;
+        let rs1 = Self::parse_fp_register(&parts[2])?;
+        let rs2 = Self::parse_fp_register(&parts[3])?;
+        
+        // funct5 = 0x14 for compare
+        let funct7 = (0x14u32 << 2) | (fmt as u32);
+        
+        Ok((funct7 << 25) | ((rs2 as u32) << 20) | ((rs1 as u32) << 15) | ((funct3 as u32) << 12) | ((rd as u32) << 7) | 0x53)
+    }
+
+    /// Encodes FCLASS instruction
+    /// Format: fclass.s rd, fs1
+    fn encode_fp_class(&self, parts: &[String], fmt: u8) -> Result<u32, String> {
+        if parts.len() < 3 {
+            return Err("FCLASS requires rd, fs1".to_string());
+        }
+        
+        let rd = Self::parse_register(&parts[1])?;
+        let rs1 = Self::parse_fp_register(&parts[2])?;
+        
+        // funct5 = 0x1c, rs2 = 1
+        let funct7 = (0x1cu32 << 2) | (fmt as u32);
+        
+        Ok((funct7 << 25) | (1u32 << 20) | ((rs1 as u32) << 15) | (0x1u32 << 12) | ((rd as u32) << 7) | 0x53)
+    }
+
+    /// Encodes FP-to-FP conversion (FCVT.D.S, FCVT.S.D, etc.)
+    /// Format: fcvt.d.s fd, fs1
+    fn encode_fp_cvt_fp(&self, parts: &[String], src_fmt: u8, dst_fmt: u8) -> Result<u32, String> {
+        if parts.len() < 3 {
+            return Err("FCVT requires fd, fs1".to_string());
+        }
+        
+        let rd = Self::parse_fp_register(&parts[1])?;
+        let rs1 = Self::parse_fp_register(&parts[2])?;
+        
+        // funct5 = 0x08 for FP-to-FP conversion
+        // rs2 encodes source format
+        let funct7 = (0x08u32 << 2) | (dst_fmt as u32);
+        
+        Ok((funct7 << 25) | ((src_fmt as u32) << 20) | ((rs1 as u32) << 15) | (0x0u32 << 12) | ((rd as u32) << 7) | 0x53)
+    }
+
     fn link_sections(&self) -> Vec<u8> {
         let text_size = self.instructions.len() * 4;
         let data_size = self.data_section.len();
@@ -1010,37 +1442,172 @@ impl Assembler {
             }
             0x13 => {
                 let imm = ((code >> 20) as i32) as i64;
-                let mnemonic = match funct3 {
-                    0x0 => "addi",
-                    0x1 => "slli",
-                    0x2 => "slti",
-                    0x3 => "sltiu",
-                    0x4 => "xori",
-                    0x5 => if funct7 & 0x20 != 0 { "srai" } else { "srli" },
-                    0x6 => "ori",
-                    0x7 => "andi",
-                    _ => "???i",
-                };
-                if funct3 == 0x1 || funct3 == 0x5 {
-                    let shamt = (code >> 20) & 0x7f;
-                    format!("{} x{}, x{}, {}", mnemonic, rd, rs1, shamt)
+                let shamt = (code >> 20) & 0x7f;
+                
+                // Check for Zbb/Zba immediate instructions
+                if funct7 == 0x30 {
+                    // Zbb: RORI
+                    if funct3 == 0x5 {
+                        format!("rori x{}, x{}, {}", rd, rs1, shamt)
+                    } else {
+                        format!("???i x{}, x{}, {}", rd, rs1, imm)
+                    }
+                } else if funct7 == 0x48 {
+                    // Zbb: BEXTI
+                    if funct3 == 0x5 {
+                        format!("bexti x{}, x{}, {}", rd, rs1, shamt)
+                    } else {
+                        format!("???i x{}, x{}, {}", rd, rs1, imm)
+                    }
+                } else if funct7 == 0x28 {
+                    // Zbb: BCLRI
+                    if funct3 == 0x5 {
+                        format!("bclri x{}, x{}, {}", rd, rs1, shamt)
+                    } else {
+                        format!("???i x{}, x{}, {}", rd, rs1, imm)
+                    }
+                } else if funct7 == 0x08 {
+                    // Zba: SLLI.UW
+                    if funct3 == 0x1 {
+                        format!("slli.uw x{}, x{}, {}", rd, rs1, shamt)
+                    } else {
+                        format!("???i x{}, x{}, {}", rd, rs1, imm)
+                    }
+                } else if funct7 == 0x0c {
+                    // Zbb: BSETI
+                    if funct3 == 0x1 {
+                        format!("bseti x{}, x{}, {}", rd, rs1, shamt)
+                    } else {
+                        format!("???i x{}, x{}, {}", rd, rs1, imm)
+                    }
+                } else if funct7 == 0x68 {
+                    // Zbb: BINVI
+                    if funct3 == 0x1 {
+                        format!("binvi x{}, x{}, {}", rd, rs1, shamt)
+                    } else {
+                        format!("???i x{}, x{}, {}", rd, rs1, imm)
+                    }
+                } else if funct7 == 0x60 {
+                    // Zbb: CLZ, CTZ, CPOP, SEXT.B, SEXT.H
+                    match funct3 {
+                        0x1 => format!("clz x{}, x{}", rd, rs1),
+                        0x2 => format!("ctz x{}, x{}", rd, rs1),
+                        0x3 => format!("cpop x{}, x{}", rd, rs1),
+                        0x4 => format!("sext.b x{}, x{}", rd, rs1),
+                        0x5 => format!("sext.h x{}, x{}", rd, rs1),
+                        _ => format!("???i x{}, x{}, {}", rd, rs1, imm),
+                    }
                 } else {
-                    format!("{} x{}, x{}, {}", mnemonic, rd, rs1, imm)
+                    // Standard I-type instructions
+                    let mnemonic = match funct3 {
+                        0x0 => "addi",
+                        0x1 => "slli",
+                        0x2 => "slti",
+                        0x3 => "sltiu",
+                        0x4 => "xori",
+                        0x5 => if funct7 & 0x20 != 0 { "srai" } else { "srli" },
+                        0x6 => "ori",
+                        0x7 => "andi",
+                        _ => "???i",
+                    };
+                    if funct3 == 0x1 || funct3 == 0x5 {
+                        format!("{} x{}, x{}, {}", mnemonic, rd, rs1, shamt)
+                    } else {
+                        format!("{} x{}, x{}, {}", mnemonic, rd, rs1, imm)
+                    }
                 }
             }
             0x33 => {
-                let mnemonic = match funct3 {
-                    0x0 => if funct7 & 0x20 != 0 { "sub" } else { "add" },
-                    0x1 => "sll",
-                    0x2 => "slt",
-                    0x3 => "sltu",
-                    0x4 => "xor",
-                    0x5 => if funct7 & 0x20 != 0 { "sra" } else { "srl" },
-                    0x6 => "or",
-                    0x7 => "and",
-                    _ => "???",
-                };
-                format!("{} x{}, x{}, x{}", mnemonic, rd, rs1, rs2)
+                // Check for M extension instructions (funct7 == 0x01)
+                if funct7 == 0x01 {
+                    let mnemonic = match funct3 {
+                        0x0 => "mul",
+                        0x1 => "mulh",
+                        0x2 => "mulhsu",
+                        0x3 => "mulhu",
+                        0x4 => "div",
+                        0x5 => "divu",
+                        0x6 => "rem",
+                        0x7 => "remu",
+                        _ => "???",
+                    };
+                    format!("{} x{}, x{}, x{}", mnemonic, rd, rs1, rs2)
+                } else if funct7 == 0x05 {
+                    // Zbc extension: carry-less multiply
+                    let mnemonic = match funct3 {
+                        0x1 => "clmul",
+                        0x2 => "clmulh",
+                        0x3 => "clmulr",
+                        _ => "???",
+                    };
+                    format!("{} x{}, x{}, x{}", mnemonic, rd, rs1, rs2)
+                } else if funct7 == 0x04 {
+                    // Zbb extension: basic bit manipulation (part 1)
+                    let mnemonic = match funct3 {
+                        0x1 => "rol",
+                        0x5 => "ror",
+                        _ => "???",
+                    };
+                    format!("{} x{}, x{}, x{}", mnemonic, rd, rs1, rs2)
+                } else if funct7 == 0x20 {
+                    // Zbb extension: ANDN, ORN, XORN
+                    let mnemonic = match funct3 {
+                        0x4 => "xorn",
+                        0x6 => "orn",
+                        0x7 => "andn",
+                        _ => "???",
+                    };
+                    format!("{} x{}, x{}, x{}", mnemonic, rd, rs1, rs2)
+                } else if funct7 == 0x30 {
+                    // Zba extension: SH1ADD, SH2ADD, SH3ADD
+                    let mnemonic = match funct3 {
+                        0x2 => "sh1add",
+                        0x4 => "sh2add",
+                        0x6 => "sh3add",
+                        _ => "???",
+                    };
+                    format!("{} x{}, x{}, x{}", mnemonic, rd, rs1, rs2)
+                } else if funct7 == 0x10 {
+                    // Zba extension: SH1ADD.UW, SH2ADD.UW, SH3ADD.UW
+                    let mnemonic = match funct3 {
+                        0x0 => "add.uw",
+                        0x2 => "sh1add.uw",
+                        0x4 => "sh2add.uw",
+                        0x6 => "sh3add.uw",
+                        _ => "???",
+                    };
+                    format!("{} x{}, x{}, x{}", mnemonic, rd, rs1, rs2)
+                } else if funct7 == 0x08 {
+                    // Zba extension: SLLI.UW is I-type, this is for other instructions
+                    "???".to_string()
+                } else if funct7 == 0x40 {
+                    // Zbb extension: MAX, MAXU, MIN, MINU
+                    let mnemonic = match funct3 {
+                        0x4 => "min",
+                        0x5 => "minu",
+                        0x6 => "max",
+                        0x7 => "maxu",
+                        _ => "???",
+                    };
+                    format!("{} x{}, x{}, x{}", mnemonic, rd, rs1, rs2)
+                } else if (funct7 & 0x80) != 0 {
+                    // P extension: SIMD instructions have bit 7 set in funct7
+                    Self::disassemble_simd(funct7, funct3, rd, rs1, rs2)
+                } else {
+                    // Standard R-type instructions
+                    let mnemonic = match funct3 {
+                        0x0 => if funct7 & 0x20 != 0 { "sub" } else { "add" },
+                        0x1 => "sll",
+                        0x2 => "slt",
+                        0x3 => "sltu",
+                        0x4 => "xor",
+                        0x5 => if funct7 & 0x20 != 0 { "sra" } else { "srl" },
+                        0x6 => "or",
+                        0x7 => "and",
+                        _ => "???",
+                    };
+                    format!("{} x{}, x{}, x{}", mnemonic, rd, rs1, rs2)
+                }
             }
             0x73 => {
                 if funct3 == 0 {
@@ -1051,10 +1618,635 @@ impl Assembler {
                         _ => format!("system 0x{:03x}", imm),
                     }
                 } else {
-                    "csr ???".to_string()
+                    // Zicsr extension: CSR instructions
+                    let csr = (code >> 20) & 0xfff;
+                    let csr_name = register::CsrAddress::from_u16(csr as u16).name();
+                    match funct3 {
+                        0x1 => format!("csrrw x{}, x{}, {}", rd, rs1, csr_name),
+                        0x2 => format!("csrrs x{}, x{}, {}", rd, rs1, csr_name),
+                        0x3 => format!("csrrc x{}, x{}, {}", rd, rs1, csr_name),
+                        0x5 => format!("csrrwi x{}, 0x{:x}, {}", rd, rs1, csr_name),
+                        0x6 => format!("csrrsi x{}, 0x{:x}, {}", rd, rs1, csr_name),
+                        0x7 => format!("csrrci x{}, 0x{:x}, {}", rd, rs1, csr_name),
+                        _ => format!("csr ??? 0x{:03x}", csr),
+                    }
                 }
             }
+            // Zifencei extension: Misc-Mem operations (opcode 0x0f)
+            0x0f => {
+                match funct3 {
+                    0x0 => {
+                        // FENCE: pred=succ format
+                        let pred = (funct7 >> 4) & 0xf;
+                        let succ = funct7 & 0xf;
+                        format!("fence 0x{:x}, 0x{:x}", pred, succ)
+                    }
+                    0x1 => "fence.i".to_string(),
+                    _ => format!("miscmem ??? funct3={}", funct3),
+                }
+            }
+            // A extension: Atomic operations (opcode 0x2f)
+            0x2f => {
+                let funct5 = (funct7 >> 2) & 0x1f;
+                let aq = (funct7 >> 1) & 1;
+                let rl = funct7 & 1;
+                let suffix = if aq != 0 && rl != 0 {
+                    ".aqrl"
+                } else if aq != 0 {
+                    ".aq"
+                } else if rl != 0 {
+                    ".rl"
+                } else {
+                    ""
+                };
+                
+                match funct5 {
+                    0x02 => {
+                        // LR.D: Load Reserved
+                        // Format: lr.d rd, (rs1)
+                        if rs2 == 0 {
+                            format!("lr.d{} x{}, (x{})", suffix, rd, rs1)
+                        } else {
+                            format!("lr.d{} x{}, (x{}) # invalid rs2={}", suffix, rd, rs1, rs2)
+                        }
+                    }
+                    0x03 => {
+                        // SC.D: Store Conditional
+                        // Format: sc.d rd, rs2, (rs1)
+                        format!("sc.d{} x{}, x{}, (x{})", suffix, rd, rs2, rs1)
+                    }
+                    0x00 => {
+                        // AMOADD.D: Atomic Add
+                        format!("amoadd.d{} x{}, x{}, (x{})", suffix, rd, rs2, rs1)
+                    }
+                    0x01 => {
+                        // AMOSWAP.D: Atomic Swap
+                        format!("amoswap.d{} x{}, x{}, (x{})", suffix, rd, rs2, rs1)
+                    }
+                    0x0c => {
+                        // AMOAND.D: Atomic AND
+                        format!("amoand.d{} x{}, x{}, (x{})", suffix, rd, rs2, rs1)
+                    }
+                    0x0a => {
+                        // AMOOR.D: Atomic OR
+                        format!("amoor.d{} x{}, x{}, (x{})", suffix, rd, rs2, rs1)
+                    }
+                    0x04 => {
+                        // AMOXOR.D: Atomic XOR
+                        format!("amoxor.d{} x{}, x{}, (x{})", suffix, rd, rs2, rs1)
+                    }
+                    0x18 => {
+                        // AMOMAX.D: Atomic Maximum (signed)
+                        format!("amomax.d{} x{}, x{}, (x{})", suffix, rd, rs2, rs1)
+                    }
+                    0x1c => {
+                        // AMOMAXU.D: Atomic Maximum (unsigned)
+                        format!("amomaxu.d{} x{}, x{}, (x{})", suffix, rd, rs2, rs1)
+                    }
+                    0x10 => {
+                        // AMOMIN.D: Atomic Minimum (signed)
+                        format!("amomin.d{} x{}, x{}, (x{})", suffix, rd, rs2, rs1)
+                    }
+                    0x14 => {
+                        // AMOMINU.D: Atomic Minimum (unsigned)
+                        format!("amominu.d{} x{}, x{}, (x{})", suffix, rd, rs2, rs1)
+                    }
+                    _ => format!("amo_unknown funct5=0x{:02x}", funct5),
+                }
+            }
+            // F/D/Q extension: Floating-point load (opcode 0x07)
+            0x07 => {
+                let imm = ((code >> 20) as i32) as i64;
+                let mnemonic = match funct3 {
+                    0x2 => "flw",
+                    0x3 => "fld",
+                    0x4 => "flq",
+                    _ => "fl?",
+                };
+                format!("{} f{}, {}(x{})", mnemonic, rd, imm, rs1)
+            }
+            // F/D/Q extension: Floating-point store (opcode 0x27)
+            0x27 => {
+                let imm = (((code >> 7) & 0x1f) | (((code >> 25) & 0x7f) << 5)) as i16 as i64;
+                let mnemonic = match funct3 {
+                    0x2 => "fsw",
+                    0x3 => "fsd",
+                    0x4 => "fsq",
+                    _ => "fs?",
+                };
+                format!("{} f{}, {}(x{})", mnemonic, rs2, imm, rs1)
+            }
+            // F/D/Q extension: Floating-point compute (opcode 0x53)
+            0x53 => {
+                let funct5 = (funct7 >> 2) & 0x1f;
+                let fmt = funct7 & 0x3;
+                let suffix = match fmt {
+                    0 => ".s",
+                    1 => ".d",
+                    3 => ".q",
+                    _ => ".?",
+                };
+                
+                match funct5 {
+                    // FADD
+                    0x00 => format!("fadd{} f{}, f{}, f{}", suffix, rd, rs1, rs2),
+                    // FSUB
+                    0x04 => format!("fsub{} f{}, f{}, f{}", suffix, rd, rs1, rs2),
+                    // FMUL
+                    0x08 => format!("fmul{} f{}, f{}, f{}", suffix, rd, rs1, rs2),
+                    // FDIV
+                    0x0c => format!("fdiv{} f{}, f{}, f{}", suffix, rd, rs1, rs2),
+                    // FSQRT
+                    0x0b => format!("fsqrt{} f{}, f{}", suffix, rd, rs1),
+                    // FSGNJ, FSGNJN, FSGNJX (funct5 = 0x10)
+                    0x10 => match funct3 {
+                        0x0 => format!("fsgnj{} f{}, f{}, f{}", suffix, rd, rs1, rs2),
+                        0x1 => format!("fsgnjn{} f{}, f{}, f{}", suffix, rd, rs1, rs2),
+                        0x2 => format!("fsgnjx{} f{}, f{}, f{}", suffix, rd, rs1, rs2),
+                        _ => format!("fsgnj?{} f{}, f{}, f{}", suffix, rd, rs1, rs2),
+                    },
+                    // FMIN/FMAX
+                    0x05 => match funct3 {
+                        0x0 => format!("fmin{} f{}, f{}, f{}", suffix, rd, rs1, rs2),
+                        0x1 => format!("fmax{} f{}, f{}, f{}", suffix, rd, rs1, rs2),
+                        _ => format!("fminmax?{} f{}, f{}, f{}", suffix, rd, rs1, rs2),
+                    },
+                    // FEQ/FLT/FLE
+                    0x14 => match funct3 {
+                        0x0 => format!("fle{} x{}, f{}, f{}", suffix, rd, rs1, rs2),
+                        0x1 => format!("flt{} x{}, f{}, f{}", suffix, rd, rs1, rs2),
+                        0x2 => format!("feq{} x{}, f{}, f{}", suffix, rd, rs1, rs2),
+                        _ => format!("fcmp?{} x{}, f{}, f{}", suffix, rd, rs1, rs2),
+                    },
+                    // FCVT.X.S/D/Q, FCLASS.S/D/Q, FMV.X.S/D/Q
+                    0x18 => {
+                        if rs2 == 0 {
+                            format!("fmv.x{} x{}, f{}", suffix, rd, rs1)
+                        } else if rs2 == 1 {
+                            format!("fclass{} x{}, f{}", suffix, rd, rs1)
+                        } else {
+                            format!("fcvt.??? x{}, f{}, rs2={}", rd, rs1, rs2)
+                        }
+                    }
+                    // FMV.S/D/Q.X
+                    0x1e => match funct3 {
+                        0x0 => format!("fmv{}.x f{}, x{}", suffix, rd, rs1),
+                        _ => format!("fmv?.x f{}, x{}", rd, rs1),
+                    },
+                    // FCVT.W/L <-> S/D/Q
+                    0x1c => Self::disassemble_fcvt_int(rd, rs1, rs2, fmt),
+                    _ => format!("fp_unk{} funct5=0x{:02x} f{}, f{}, f{}", suffix, funct5, rd, rs1, rs2),
+                }
+            }
+            // V extension: Vector operations (opcode 0x57)
+            0x57 => {
+                let funct6 = (funct7 >> 1) & 0x3f;
+                Self::disassemble_vector(funct6, funct3, rd, rs1, rs2)
+            }
             _ => format!("unknown opcode 0x{:02x}", opcode),
+        }
+    }
+
+    /// Disassemble vector instructions.
+    fn disassemble_vector(funct6: u8, funct3: u8, rd: u8, rs1: u8, rs2: u8) -> String {
+        match funct3 {
+            // OPIVV: Vector-Vector integer
+            0x0 => match funct6 {
+                0x00 => format!("vadd.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x02 => format!("vsub.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x04 => format!("vmin.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x05 => format!("vminu.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x06 => format!("vmax.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x07 => format!("vmaxu.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x08 => format!("vand.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x09 => format!("vor.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x0a => format!("vxor.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x0c => format!("vsll.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x0d => format!("vsrl.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x0e => format!("vsra.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x18 => format!("vmv.v.v v{}, v{}", rd, rs2),
+                _ => format!("v_opivv v{}, v{}, v{} funct6=0x{:02x}", rd, rs1, rs2, funct6),
+            },
+            // OPFVV: Vector-Vector floating-point
+            0x1 => match funct6 {
+                0x00 => format!("vfadd.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x02 => format!("vfsub.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x04 => format!("vfmin.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x05 => format!("vfmax.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x18 => format!("vfmv.v.f v{}, f{}", rd, rs1),
+                _ => format!("v_opfvv v{}, v{}, v{} funct6=0x{:02x}", rd, rs1, rs2, funct6),
+            },
+            // OPMVV: Vector multiply/divide
+            0x2 => match funct6 {
+                0x0d => format!("vdiv.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x0f => format!("vrem.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x11 => format!("vmul.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x13 => format!("vmulh.vv v{}, v{}, v{}", rd, rs1, rs2),
+                0x18 => format!("vmacc.vv v{}, v{}, v{}", rd, rs1, rs2),
+                _ => format!("v_opmvv v{}, v{}, v{} funct6=0x{:02x}", rd, rs1, rs2, funct6),
+            },
+            // OPVI: Vector-Immediate integer
+            0x3 => match funct6 {
+                0x00 => format!("vadd.vx v{}, v{}, x{}", rd, rs2, rs1),
+                0x02 => format!("vsub.vx v{}, v{}, x{}", rd, rs2, rs1),
+                0x08 => format!("vand.vx v{}, v{}, x{}", rd, rs2, rs1),
+                0x09 => format!("vor.vx v{}, v{}, x{}", rd, rs2, rs1),
+                0x0a => format!("vxor.vx v{}, v{}, x{}", rd, rs2, rs1),
+                0x0c => format!("vsll.vx v{}, v{}, x{}", rd, rs2, rs1),
+                0x0d => format!("vsrl.vx v{}, v{}, x{}", rd, rs2, rs1),
+                0x0e => format!("vsra.vx v{}, v{}, x{}", rd, rs2, rs1),
+                _ => format!("v_opvi v{}, v{}, x{} funct6=0x{:02x}", rd, rs2, rs1, funct6),
+            },
+            // OPIVI: Vector-5-bit immediate
+            0x4 => {
+                let imm = ((rs1 as i8) << 3 >> 3) as i16;
+                match funct6 {
+                    0x00 => format!("vadd.vi v{}, v{}, {}", rd, rs2, imm),
+                    0x08 => format!("vand.vi v{}, v{}, {}", rd, rs2, imm),
+                    0x09 => format!("vor.vi v{}, v{}, {}", rd, rs2, imm),
+                    0x0a => format!("vxor.vi v{}, v{}, {}", rd, rs2, imm),
+                    0x0c => format!("vsll.vi v{}, v{}, {}", rd, rs2, imm),
+                    0x0d => format!("vsrl.vi v{}, v{}, {}", rd, rs2, imm),
+                    0x0e => format!("vsra.vi v{}, v{}, {}", rd, rs2, imm),
+                    _ => format!("v_opivi v{}, v{}, {} funct6=0x{:02x}", rd, rs2, imm, funct6),
+                }
+            }
+            // OPFVF: Vector-Scalar FP
+            0x5 => match funct6 {
+                0x00 => format!("vfadd.vf v{}, v{}, f{}", rd, rs2, rs1),
+                0x02 => format!("vfsub.vf v{}, v{}, f{}", rd, rs2, rs1),
+                0x04 => format!("vfmin.vf v{}, v{}, f{}", rd, rs2, rs1),
+                0x05 => format!("vfmax.vf v{}, v{}, f{}", rd, rs2, rs1),
+                0x18 => format!("vfmv.v.f v{}, f{}", rd, rs1),
+                _ => format!("v_opfvf v{}, v{}, f{} funct6=0x{:02x}", rd, rs2, rs1, funct6),
+            },
+            // Vector load/store
+            0x6 => match funct6 {
+                0x00 => format!("vle8.v v{}, (x{})", rd, rs1),
+                0x01 => format!("vle16.v v{}, (x{})", rd, rs1),
+                0x02 => format!("vle32.v v{}, (x{})", rd, rs1),
+                0x03 => format!("vle64.v v{}, (x{})", rd, rs1),
+                0x04 => format!("vle128.v v{}, (x{})", rd, rs1),
+                _ => format!("v_load/store v{}, (x{}) funct6=0x{:02x}", rd, rs1, funct6),
+            },
+            // Vector configuration
+            0x7 => match funct6 {
+                0x30 => format!("vsetvli x{}, x{}, 0x{:02x}", rd, rs1, rs2),
+                0x31 => format!("vsetivli x{}, {}, 0x{:02x}", rd, rs1, rs2),
+                0x3f => format!("vsetvl x{}, x{}, x{}", rd, rs1, rs2),
+                _ => format!("v_cfg funct6=0x{:02x}", funct6),
+            },
+            _ => format!("v_unknown funct3=0x{:02x}", funct3),
+        }
+    }
+
+    /// Disassemble SIMD instruction (P extension).
+    fn disassemble_simd(funct7: u8, funct3: u8, rd: u8, rs1: u8, rs2: u8) -> String {
+        let mnemonic = match funct7 {
+            // SIMD arithmetic operations
+            0x80 => match funct3 {
+                0x0 => "add8",
+                0x1 => "add16",
+                0x2 => "add32",
+                0x3 => "add64",
+                _ => "simd_add?",
+            },
+            0x81 => match funct3 {
+                0x0 => "sub8",
+                0x1 => "sub16",
+                0x2 => "sub32",
+                0x3 => "sub64",
+                _ => "simd_sub?",
+            },
+            0x82 => match funct3 {
+                0x0 => "mul8",
+                0x1 => "mul16",
+                0x2 => "mul32",
+                0x3 => "mul64",
+                _ => "simd_mul?",
+            },
+            0x83 => match funct3 {
+                0x0 => "sll8",
+                0x1 => "sll16",
+                0x2 => "sll32",
+                0x3 => "sll64",
+                _ => "simd_sll?",
+            },
+            0x84 => match funct3 {
+                0x0 => "srl8",
+                0x1 => "srl16",
+                0x2 => "srl32",
+                0x3 => "srl64",
+                _ => "simd_srl?",
+            },
+            0x85 => match funct3 {
+                0x0 => "sra8",
+                0x1 => "sra16",
+                0x2 => "sra32",
+                0x3 => "sra64",
+                _ => "simd_sra?",
+            },
+            0x86 => match funct3 {
+                0x0 => "and8",
+                0x1 => "and16",
+                0x2 => "and32",
+                0x3 => "and64",
+                _ => "simd_and?",
+            },
+            0x87 => match funct3 {
+                0x0 => "or8",
+                0x1 => "or16",
+                0x2 => "or32",
+                0x3 => "or64",
+                _ => "simd_or?",
+            },
+            0x88 => match funct3 {
+                0x0 => "xor8",
+                0x1 => "xor16",
+                0x2 => "xor32",
+                0x3 => "xor64",
+                _ => "simd_xor?",
+            },
+            0x89 => match funct3 {
+                0x0 => "cmpeq8",
+                0x1 => "cmpeq16",
+                0x2 => "cmpeq32",
+                0x3 => "cmpeq64",
+                _ => "simd_cmpeq?",
+            },
+            0x8a => match funct3 {
+                0x0 => "cmplt8",
+                0x1 => "cmplt16",
+                0x2 => "cmplt32",
+                0x3 => "cmplt64",
+                _ => "simd_cmplt?",
+            },
+            0x8b => match funct3 {
+                0x0 => "cmpltu8",
+                0x1 => "cmpltu16",
+                0x2 => "cmpltu32",
+                0x3 => "cmpltu64",
+                _ => "simd_cmpltu?",
+            },
+            0x8c => match funct3 {
+                0x0 => "min8",
+                0x1 => "min16",
+                0x2 => "min32",
+                0x3 => "min64",
+                _ => "simd_min?",
+            },
+            0x8d => match funct3 {
+                0x0 => "minu8",
+                0x1 => "minu16",
+                0x2 => "minu32",
+                0x3 => "minu64",
+                _ => "simd_minu?",
+            },
+            0x8e => match funct3 {
+                0x0 => "max8",
+                0x1 => "max16",
+                0x2 => "max32",
+                0x3 => "max64",
+                _ => "simd_max?",
+            },
+            0x8f => match funct3 {
+                0x0 => "maxu8",
+                0x1 => "maxu16",
+                0x2 => "maxu32",
+                0x3 => "maxu64",
+                _ => "simd_maxu?",
+            },
+            _ => "simd?",
+        };
+        format!("{} x{}, x{}, x{}", mnemonic, rd, rs1, rs2)
+    }
+
+    /// Disassemble 16-bit compressed instruction.
+    pub fn disassemble_compressed(code: u16) -> String {
+        let opcode = (code & 0x3) as u8;
+        let funct3 = ((code >> 13) & 0x7) as u8;
+        let rd = ((code >> 7) & 0x1f) as u8;
+        let rs2 = ((code >> 2) & 0x1f) as u8;
+        
+        match opcode {
+            0x0 => match funct3 {
+                0x0 => {
+                    let nzuimm = (((code >> 3) & 0x1f) | 
+                                 (((code >> 5) & 0x1) << 5) |
+                                 (((code >> 6) & 0x1) << 6) |
+                                 (((code >> 11) & 0x1) << 7)) as u16;
+                    if nzuimm == 0 {
+                        "c.illegal".to_string()
+                    } else {
+                        format!("c.addi4spn x{}, x2, {}", rd + 8, nzuimm)
+                    }
+                }
+                0x2 => {
+                    let offset = ((((code >> 6) & 0x7) << 2) |
+                                 (((code >> 10) & 0x3) << 6)) as u16;
+                    format!("c.lw x{}, {}(x{})", rd + 8, offset, rs2 + 8)
+                }
+                0x3 => {
+                    let offset = ((((code >> 6) & 0x7) << 3) |
+                                 (((code >> 10) & 0x7) << 6)) as u16;
+                    format!("c.ld x{}, {}(x{})", rd + 8, offset, rs2 + 8)
+                }
+                0x6 => {
+                    let offset = ((((code >> 6) & 0x7) << 2) |
+                                 (((code >> 10) & 0x3) << 6)) as u16;
+                    format!("c.sw x{}, {}(x{})", rs2 + 8, offset, rd + 8)
+                }
+                0x7 => {
+                    let offset = ((((code >> 6) & 0x7) << 3) |
+                                 (((code >> 10) & 0x7) << 6)) as u16;
+                    format!("c.sd x{}, {}(x{})", rs2 + 8, offset, rd + 8)
+                }
+                _ => format!("c.q0 funct3=0x{:02x}", funct3),
+            },
+            0x1 => match funct3 {
+                0x0 => {
+                    let imm = ((((code >> 12) & 0x1) << 5) | ((code >> 2) & 0x1f)) as i8 as i16;
+                    if rd == 0 {
+                        format!("c.nop")
+                    } else {
+                        format!("c.addi x{}, {}", rd, imm)
+                    }
+                }
+                0x1 => {
+                    let offset = (((code >> 2) & 0x7ff) as i16) << 1;
+                    format!("c.jal {:+}", offset)
+                }
+                0x2 => {
+                    let imm = ((((code >> 12) & 0x1) << 5) | ((code >> 2) & 0x1f)) as i8 as i16;
+                    format!("c.li x{}, {}", rd, imm)
+                }
+                0x3 => {
+                    if rd == 2 {
+                        let nzimm = (((((code >> 12) & 0x1) << 9) |
+                                     (((code >> 3) & 0x3) << 7) |
+                                     (((code >> 5) & 0x1) << 6) |
+                                     (((code >> 2) & 0x1) << 5) |
+                                     (((code >> 6) & 0x1) << 4)) as i16) << 4;
+                        format!("c.addi16sp x2, {}", nzimm)
+                    } else {
+                        let nzimm = ((((code >> 12) & 0x1) as u32) << 17) | ((((code >> 2) & 0x1f) as u32) << 12);
+                        format!("c.lui x{}, 0x{:x}", rd, nzimm >> 12)
+                    }
+                }
+                0x4 => {
+                    let funct2 = ((code >> 10) & 0x3) as u8;
+                    match funct2 {
+                        0x0 | 0x1 => {
+                            let shamt = ((((code >> 12) & 0x1) << 5) | ((code >> 2) & 0x1f)) as u8;
+                            if funct2 == 0x1 {
+                                format!("c.srai x{}, {}", rs2 + 8, shamt)
+                            } else {
+                                format!("c.srli x{}, {}", rs2 + 8, shamt)
+                            }
+                        }
+                        0x2 => {
+                            let imm = ((((code >> 12) & 0x1) << 5) | ((code >> 2) & 0x1f)) as i8 as i16;
+                            format!("c.andi x{}, {}", rs2 + 8, imm)
+                        }
+                        0x3 => {
+                            let funct2_sub = ((code >> 5) & 0x3) as u8;
+                            match funct2_sub {
+                                0x0 => format!("c.sub x{}, x{}", rs2 + 8, rd),
+                                0x1 => format!("c.xor x{}, x{}", rs2 + 8, rd),
+                                0x2 => format!("c.or x{}, x{}", rs2 + 8, rd),
+                                0x3 => format!("c.and x{}, x{}", rs2 + 8, rd),
+                                _ => "c.unknown".to_string(),
+                            }
+                        }
+                        _ => "c.q1.unk".to_string(),
+                    }
+                }
+                0x5 => {
+                    let offset = (((code >> 2) & 0x7ff) as i16) << 1;
+                    format!("c.j {:+}", offset)
+                }
+                0x6 => {
+                    let offset = ((((code >> 2) & 0x1) |
+                                 (((code >> 3) & 0x3) << 1) |
+                                 (((code >> 5) & 0x3) << 3) |
+                                 (((code >> 10) & 0x3) << 5) |
+                                 (((code >> 12) & 0x1) << 7)) as i16) << 1;
+                    format!("c.beqz x{}, {:+}", rs2 + 8, offset)
+                }
+                0x7 => {
+                    let offset = ((((code >> 2) & 0x1) |
+                                 (((code >> 3) & 0x3) << 1) |
+                                 (((code >> 5) & 0x3) << 3) |
+                                 (((code >> 10) & 0x3) << 5) |
+                                 (((code >> 12) & 0x1) << 7)) as i16) << 1;
+                    format!("c.bnez x{}, {:+}", rs2 + 8, offset)
+                }
+                _ => format!("c.q1 funct3=0x{:02x}", funct3),
+            },
+            0x2 => match funct3 {
+                0x0 => {
+                    let shamt = ((((code >> 12) & 0x1) << 5) | ((code >> 2) & 0x1f)) as u8;
+                    format!("c.slli x{}, {}", rd, shamt)
+                }
+                0x2 => {
+                    let offset = ((((code >> 2) & 0x7) << 2) |
+                                 (((code >> 12) & 0x1) << 5) |
+                                 (((code >> 5) & 0x3) << 6)) as u16;
+                    format!("c.lwsp x{}, {}(x2)", rd, offset)
+                }
+                0x3 => {
+                    let offset = ((((code >> 2) & 0x7) << 3) |
+                                 (((code >> 12) & 0x1) << 5) |
+                                 (((code >> 5) & 0x7) << 6)) as u16;
+                    format!("c.ldsp x{}, {}(x2)", rd, offset)
+                }
+                0x4 => {
+                    if ((code >> 12) & 0x1) == 0 {
+                        if rs2 == 0 {
+                            format!("c.jr x{}", rd)
+                        } else {
+                            format!("c.mv x{}, x{}", rd, rs2)
+                        }
+                    } else {
+                        if rd == 0 && rs2 == 0 {
+                            "c.ebreak".to_string()
+                        } else if rs2 == 0 {
+                            format!("c.jalr x{}", rd)
+                        } else {
+                            format!("c.add x{}, x{}", rd, rs2)
+                        }
+                    }
+                }
+                0x6 => {
+                    let offset = ((((code >> 2) & 0x7) << 2) |
+                                 (((code >> 9) & 0xf) << 5)) as u16;
+                    format!("c.swsp x{}, {}(x2)", rs2, offset)
+                }
+                0x7 => {
+                    let offset = ((((code >> 2) & 0x7) << 3) |
+                                 (((code >> 10) & 0x7) << 6) |
+                                 (((code >> 9) & 0x1) << 9)) as u16;
+                    format!("c.sdsp x{}, {}(x2)", rs2, offset)
+                }
+                _ => format!("c.q2 funct3=0x{:02x}", funct3),
+            },
+            _ => format!("c.illegal 0x{:04x}", code),
+        }
+    }
+
+    /// Disassemble FCVT instructions (floating-point to floating-point)
+    fn disassemble_fcvt(rd: u8, rs1: u8, rs2: u8, dst_fmt: u8) -> String {
+        let dst_suffix = match dst_fmt {
+            0 => ".s",
+            1 => ".d",
+            3 => ".q",
+            _ => ".?",
+        };
+        let src_suffix = match rs2 {
+            0 => ".s",
+            1 => ".d",
+            3 => ".q",
+            _ => ".?",
+        };
+        format!("fcvt{}{} f{}, f{}", dst_suffix, src_suffix, rd, rs1)
+    }
+
+    /// Disassemble FCVT instructions (floating-point to/from integer)
+    fn disassemble_fcvt_int(rd: u8, rs1: u8, rs2: u8, _fmt: u8) -> String {
+        match rs2 {
+            // To signed 32-bit
+            0x00 => format!("fcvt.w.s x{}, f{}", rd, rs1),
+            0x01 => format!("fcvt.w.d x{}, f{}", rd, rs1),
+            0x03 => format!("fcvt.w.q x{}, f{}", rd, rs1),
+            // To unsigned 32-bit
+            0x04 => format!("fcvt.wu.s x{}, f{}", rd, rs1),
+            0x05 => format!("fcvt.wu.d x{}, f{}", rd, rs1),
+            0x07 => format!("fcvt.wu.q x{}, f{}", rd, rs1),
+            // To signed 64-bit
+            0x08 => format!("fcvt.l.s x{}, f{}", rd, rs1),
+            0x09 => format!("fcvt.l.d x{}, f{}", rd, rs1),
+            0x0b => format!("fcvt.l.q x{}, f{}", rd, rs1),
+            // To unsigned 64-bit
+            0x0c => format!("fcvt.lu.s x{}, f{}", rd, rs1),
+            0x0d => format!("fcvt.lu.d x{}, f{}", rd, rs1),
+            0x0f => format!("fcvt.lu.q x{}, f{}", rd, rs1),
+            // From signed 32-bit
+            0x10 => format!("fcvt.s.w f{}, x{}", rd, rs1),
+            0x11 => format!("fcvt.d.w f{}, x{}", rd, rs1),
+            0x13 => format!("fcvt.q.w f{}, x{}", rd, rs1),
+            // From unsigned 32-bit
+            0x14 => format!("fcvt.s.wu f{}, x{}", rd, rs1),
+            0x15 => format!("fcvt.d.wu f{}, x{}", rd, rs1),
+            0x17 => format!("fcvt.q.wu f{}, x{}", rd, rs1),
+            // From signed 64-bit
+            0x18 => format!("fcvt.s.l f{}, x{}", rd, rs1),
+            0x19 => format!("fcvt.d.l f{}, x{}", rd, rs1),
+            0x1b => format!("fcvt.q.l f{}, x{}", rd, rs1),
+            // From unsigned 64-bit
+            0x1c => format!("fcvt.s.lu f{}, x{}", rd, rs1),
+            0x1d => format!("fcvt.d.lu f{}, x{}", rd, rs1),
+            0x1f => format!("fcvt.q.lu f{}, x{}", rd, rs1),
+            _ => format!("fcvt.??? x{}, x{}, rs2={}", rd, rs1, rs2),
         }
     }
 

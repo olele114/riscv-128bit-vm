@@ -1,18 +1,20 @@
-# RISC-V 128-bit Virtual Machine
+# RISC-V 128位虚拟机
 
-一个用 Rust 实现的 RISC-V 128位虚拟机框架，支持机器码直接执行和汇编语言即时汇编运行。
+一个高性能的 Rust 实现的 128 位 RISC-V 虚拟机，支持自定义指令集扩展和高级内存管理。
 
 ## 特性
 
-- **128位寄存器**: 完整支持 RISC-V 128位整数扩展
+- **128位寄存器**: 完整支持 RISC-V 128位整数扩展 (I)
+- **32个浮点寄存器**: 支持 F/D/Q 浮点扩展
+- **32个向量寄存器**: 支持 V 向量扩展
 - **内置汇编器**: 支持直接加载和运行 RISC-V 汇编代码
 - **灵活的内存系统**: 可配置内存大小，支持字节/半字/字/双字/四字访问
 - **调试支持**: 单步执行、指令追踪、寄存器状态查看
 - **异常处理**: 完整的异常捕获和报告机制
 
-## 支持的指令集
+## 支持的扩展
 
-### 基础整数指令
+### 基础整数指令 (I)
 
 | 类型 | 指令 |
 |------|------|
@@ -24,6 +26,124 @@
 | U-type | LUI, AUIPC |
 | Jump | JAL, JALR |
 | System | ECALL, EBREAK |
+
+### M 扩展 (整数乘除法)
+
+| 指令 | 描述 |
+|------|------|
+| MUL | 乘法低位 |
+| MULH | 乘法高位 (有符号) |
+| MULHSU | 乘法高位 (有符号-无符号) |
+| MULHU | 乘法高位 (无符号) |
+| DIV | 除法 (有符号) |
+| DIVU | 除法 (无符号) |
+| REM | 余数 (有符号) |
+| REMU | 余数 (无符号) |
+
+### A 扩展 (原子内存操作)
+
+| 指令 | 描述 |
+|------|------|
+| LR.D | 加载保留 |
+| SC.D | 存储条件 |
+| AMOADD.D | 原子加法 |
+| AMOSWAP.D | 原子交换 |
+| AMOAND.D | 原子与 |
+| AMOOR.D | 原子或 |
+| AMOXOR.D | 原子异或 |
+| AMOMAX.D | 原子最大值 (有符号) |
+| AMOMAXU.D | 原子最大值 (无符号) |
+| AMOMIN.D | 原子最小值 (有符号) |
+| AMOMINU.D | 原子最小值 (无符号) |
+
+### F 扩展 (单精度浮点)
+
+| 类别 | 指令 |
+|------|------|
+| 加载/存储 | FLW, FSW |
+| 算术 | FADD.S, FSUB.S, FMUL.S, FDIV.S, FSQRT.S |
+| 符号注入 | FSGNJ.S, FSGNJN.S, FSGNJX.S |
+| 最小/最大 | FMIN.S, FMAX.S |
+| 转换 | FCVT.W.S, FCVT.WU.S, FCVT.S.W, FCVT.S.WU, FCVT.L.S, FCVT.LU.S, FCVT.S.L, FCVT.S.LU |
+| 移动 | FMV.X.S, FMV.S.X |
+| 比较 | FEQ.S, FLT.S, FLE.S |
+| 分类 | FCLASS.S |
+
+### D 扩展 (双精度浮点)
+
+| 类别 | 指令 |
+|------|------|
+| 加载/存储 | FLD, FSD |
+| 算术 | FADD.D, FSUB.D, FMUL.D, FDIV.D, FSQRT.D |
+| 符号注入 | FSGNJ.D, FSGNJN.D, FSGNJX.D |
+| 最小/最大 | FMIN.D, FMAX.D |
+| 转换 | FCVT.W.D, FCVT.WU.D, FCVT.D.W, FCVT.D.WU, FCVT.L.D, FCVT.LU.D, FCVT.D.L, FCVT.D.LU |
+| 移动 | FMV.X.D, FMV.D.X |
+| 比较 | FEQ.D, FLT.D, FLE.D |
+| 分类 | FCLASS.D |
+| 精度转换 | FCVT.D.S, FCVT.S.D |
+
+### Q 扩展 (四精度浮点)
+
+| 类别 | 指令 |
+|------|------|
+| 加载/存储 | FLQ, FSQ |
+| 算术 | FADD.Q, FSUB.Q, FMUL.Q, FDIV.Q, FSQRT.Q |
+| 符号注入 | FSGNJ.Q, FSGNJN.Q, FSGNJX.Q |
+| 最小/最大 | FMIN.Q, FMAX.Q |
+| 转换 | FCVT.W.Q, FCVT.WU.Q, FCVT.Q.W, FCVT.Q.WU, FCVT.L.Q, FCVT.LU.Q, FCVT.Q.L, FCVT.Q.LU |
+| 移动 | FMV.X.Q, FMV.Q.X |
+| 比较 | FEQ.Q, FLT.Q, FLE.Q |
+| 分类 | FCLASS.Q |
+| 精度转换 | FCVT.Q.S, FCVT.S.Q, FCVT.Q.D, FCVT.D.Q |
+
+### V 扩展 (向量操作)
+
+- 向量加载/存储操作
+- 向量整数操作
+- 向量浮点操作
+- 向量配置 (vsetvli, vsetvl)
+- 支持多种元素宽度 (8/16/32/64/128/256/512/1024位)
+- 长度乘数 (LMUL) 支持
+
+### C 扩展 (压缩指令)
+
+16位压缩指令，用于减小代码体积：
+- C.ADDI4SPN, C.LW, C.LD, C.SW, C.SD
+- C.ADDI, C.JAL, C.LI, C.ADDI16SP, C.LUI
+- C.SRLI, C.SRAI, C.ANDI, C.SUB, C.XOR, C.OR, C.AND
+- C.J, C.BEQZ, C.BNEZ
+- 更多...
+
+### Zicsr 扩展 (控制状态寄存器)
+
+| 指令 | 描述 |
+|------|------|
+| CSRRW | CSR 读写 |
+| CSRRS | CSR 读置位 |
+| CSRRC | CSR 读清除 |
+| CSRRWI | CSR 读写立即数 |
+| CSRRSI | CSR 读置位立即数 |
+| CSRRCI | CSR 读清除立即数 |
+
+### Zifencei 扩展 (指令屏障)
+
+| 指令 | 描述 |
+|------|------|
+| FENCE.I | 指令缓存同步 |
+
+### Zba/Zbb/Zbc 扩展 (位操作)
+
+| 类别 | 指令 |
+|------|------|
+| 移位加法 | SH1ADD, SH2ADD, SH3ADD, SH1ADD.UW, SH2ADD.UW, SH3ADD.UW |
+| 循环移位 | ROL, ROR, RORI |
+| 逻辑运算 | ANDN, ORN, XORN |
+| 计数 | CLZ, CTZ, CPOP |
+| 无进位乘法 | CLMUL, CLMULR, CLMULH |
+| 最小/最大 | MIN, MAX, MINU, MAXU |
+| 位提取/插入 | BEXTI, BCLRI, BSETI, BINVI |
+| 特殊操作 | ADD.UW, SLLI.UW |
 
 ### 伪指令支持
 
@@ -51,19 +171,19 @@ beqz rs, label -> beq rs, x0, label
 ### 编译
 
 ```bash
-git clone <repository-url>
-cd vm_project
+git clone https://github.com/olele114/riscv-128bit-vm.git
+cd riscv-128bit-vm
 cargo build --release
 ```
 
-编译后的可执行文件位于 `target/release/vm_project.exe`。
+编译后的可执行文件位于 `target/release/riscv-128bit-vm.exe`。
 
 ## 使用方法
 
 ### 命令行参数
 
 ```
-vm_project [options] [program_file]
+riscv-128bit-vm [options] [program_file]
 
 选项:
   --help              显示帮助信息
@@ -85,27 +205,27 @@ vm_project [options] [program_file]
 
 ```bash
 # 运行二进制程序
-vm_project program.bin
+riscv-128bit-vm program.bin
 
 # 运行汇编程序
-vm_project program.s
+riscv-128bit-vm program.s
 
 # 指定加载地址运行
-vm_project --load-addr 0x80000000 firmware.asm
+riscv-128bit-vm --load-addr 0x80000000 firmware.asm
 
 # 调试模式运行
-vm_project --debug --trace program.s
+riscv-128bit-vm --debug --trace program.s
 
 # 单步执行
-vm_project --step program.s
+riscv-128bit-vm --step program.s
 
 # 自定义内存大小 (32MB)
-vm_project --memory 0x2000000 program.bin
+riscv-128bit-vm --memory 0x2000000 program.bin
 ```
 
 ## 汇编语言示例
 
-### Hello World 风格示例
+### 基本计算
 
 ```asm
 # 简单计算示例
@@ -153,6 +273,44 @@ loop:
     
     addi t3, t2, 1     # t3 = t2 + 1
     
+    ebreak
+```
+
+### 浮点运算示例
+
+```asm
+# 浮点计算
+.text
+
+    li t0, 0x1000      # 浮点数据内存地址
+    
+    # 单精度加载和存储
+    flw f0, 0(t0)      # 加载单精度浮点
+    fadd.s f2, f0, f1  # 单精度加法
+    
+    # 双精度加载和存储
+    fld f4, 8(t0)      # 加载双精度浮点
+    fmul.d f6, f4, f5  # 双精度乘法
+    
+    ebreak
+```
+
+### 原子操作示例
+
+```asm
+# 原子内存操作
+.text
+
+    li t0, 0x1000      # 内存地址
+    
+    lr.d t1, 0(t0)     # 加载保留
+    addi t1, t1, 1     # 自增
+    sc.d t2, t1, 0(t0) # 存储条件
+    
+    beqz t2, done      # 如果成功 (t2 == 0), 完成
+    j atomic_retry     # 失败则重试
+    
+done:
     ebreak
 ```
 
@@ -214,15 +372,15 @@ while vm.is_running() && !vm.has_exception() {
 ## 项目结构
 
 ```
-vm_project/
+riscv-128bit-vm/
 ├── Cargo.toml
 └── src/
     ├── main.rs              # 主程序入口
     └── riscv/
         ├── mod.rs           # 模块导出
         ├── cpu.rs           # CPU 实现
-        ├── register.rs      # 寄存器实现
-        ├── memory.rs        # 内存实现
+        ├── register.rs      # 寄存器组 (GPR, FPR, VR, CSR)
+        ├── memory.rs        # 内存系统，支持 AMO
         ├── instruction.rs   # 指令解码器
         ├── executor.rs      # 指令执行器
         ├── virtual_machine.rs # 虚拟机接口
@@ -230,6 +388,8 @@ vm_project/
 ```
 
 ## 寄存器映射
+
+### 通用寄存器
 
 | 寄存器 | ABI 名称 | 用途 |
 |--------|----------|------|
@@ -244,6 +404,22 @@ vm_project/
 | x10-x17 | a0-a7 | 函数参数/返回值 |
 | x18-x27 | s2-s11 | 保存寄存器 |
 | x28-x31 | t3-t6 | 临时寄存器 |
+
+### 浮点寄存器
+
+| 寄存器 | ABI 名称 | 用途 |
+|--------|----------|------|
+| f0-f7 | ft0-ft7 | 浮点临时寄存器 |
+| f8-f9 | fs0-fs1 | 浮点保存寄存器 |
+| f10-f17 | fa0-fa7 | 浮点参数/返回值 |
+| f18-f27 | fs2-fs11 | 浮点保存寄存器 |
+| f28-f31 | ft8-ft11 | 浮点临时寄存器 |
+
+### 向量寄存器
+
+| 寄存器 | ABI 名称 | 用途 |
+|--------|----------|------|
+| v0-v31 | v0-v31 | 向量寄存器 |
 
 ## 许可证
 

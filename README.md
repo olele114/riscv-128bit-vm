@@ -1,18 +1,20 @@
 # RISC-V 128-bit Virtual Machine
 
-A RISC-V 128-bit virtual machine framework implemented in Rust, supporting direct machine code execution and just-in-time assembly.
+A high-performance 128-bit RISC-V virtual machine implemented in Rust, featuring custom instruction set extensions and advanced memory management.
 
 ## Features
 
-- **128-bit Registers**: Full support for RISC-V 128-bit integer extension
+- **128-bit Registers**: Full support for RISC-V 128-bit integer extension (I)
+- **32 Floating-Point Registers**: Support for F/D/Q floating-point extensions
+- **32 Vector Registers**: Support for V vector extension
 - **Built-in Assembler**: Direct loading and execution of RISC-V assembly code
 - **Flexible Memory System**: Configurable memory size with byte/half-word/word/double-word/quad-word access
 - **Debug Support**: Single-step execution, instruction tracing, register state inspection
 - **Exception Handling**: Complete exception capture and reporting mechanism
 
-## Supported Instruction Set
+## Supported Extensions
 
-### Base Integer Instructions
+### Base Integer Instructions (I)
 
 | Type | Instructions |
 |------|--------------|
@@ -24,6 +26,124 @@ A RISC-V 128-bit virtual machine framework implemented in Rust, supporting direc
 | U-type | LUI, AUIPC |
 | Jump | JAL, JALR |
 | System | ECALL, EBREAK |
+
+### M Extension (Integer Multiplication/Division)
+
+| Instruction | Description |
+|-------------|-------------|
+| MUL | Multiply low |
+| MULH | Multiply high signed |
+| MULHSU | Multiply high signed-unsigned |
+| MULHU | Multiply high unsigned |
+| DIV | Divide signed |
+| DIVU | Divide unsigned |
+| REM | Remainder signed |
+| REMU | Remainder unsigned |
+
+### A Extension (Atomic Memory Operations)
+
+| Instruction | Description |
+|-------------|-------------|
+| LR.D | Load Reserved |
+| SC.D | Store Conditional |
+| AMOADD.D | Atomic Add |
+| AMOSWAP.D | Atomic Swap |
+| AMOAND.D | Atomic AND |
+| AMOOR.D | Atomic OR |
+| AMOXOR.D | Atomic XOR |
+| AMOMAX.D | Atomic Maximum signed |
+| AMOMAXU.D | Atomic Maximum unsigned |
+| AMOMIN.D | Atomic Minimum signed |
+| AMOMINU.D | Atomic Minimum unsigned |
+
+### F Extension (Single-Precision Floating-Point)
+
+| Category | Instructions |
+|----------|--------------|
+| Load/Store | FLW, FSW |
+| Arithmetic | FADD.S, FSUB.S, FMUL.S, FDIV.S, FSQRT.S |
+| Sign Injection | FSGNJ.S, FSGNJN.S, FSGNJX.S |
+| Min/Max | FMIN.S, FMAX.S |
+| Convert | FCVT.W.S, FCVT.WU.S, FCVT.S.W, FCVT.S.WU, FCVT.L.S, FCVT.LU.S, FCVT.S.L, FCVT.S.LU |
+| Move | FMV.X.S, FMV.S.X |
+| Compare | FEQ.S, FLT.S, FLE.S |
+| Classify | FCLASS.S |
+
+### D Extension (Double-Precision Floating-Point)
+
+| Category | Instructions |
+|----------|--------------|
+| Load/Store | FLD, FSD |
+| Arithmetic | FADD.D, FSUB.D, FMUL.D, FDIV.D, FSQRT.D |
+| Sign Injection | FSGNJ.D, FSGNJN.D, FSGNJX.D |
+| Min/Max | FMIN.D, FMAX.D |
+| Convert | FCVT.W.D, FCVT.WU.D, FCVT.D.W, FCVT.D.WU, FCVT.L.D, FCVT.LU.D, FCVT.D.L, FCVT.D.LU |
+| Move | FMV.X.D, FMV.D.X |
+| Compare | FEQ.D, FLT.D, FLE.D |
+| Classify | FCLASS.D |
+| Precision Convert | FCVT.D.S, FCVT.S.D |
+
+### Q Extension (Quad-Precision Floating-Point)
+
+| Category | Instructions |
+|----------|--------------|
+| Load/Store | FLQ, FSQ |
+| Arithmetic | FADD.Q, FSUB.Q, FMUL.Q, FDIV.Q, FSQRT.Q |
+| Sign Injection | FSGNJ.Q, FSGNJN.Q, FSGNJX.Q |
+| Min/Max | FMIN.Q, FMAX.Q |
+| Convert | FCVT.W.Q, FCVT.WU.Q, FCVT.Q.W, FCVT.Q.WU, FCVT.L.Q, FCVT.LU.Q, FCVT.Q.L, FCVT.Q.LU |
+| Move | FMV.X.Q, FMV.Q.X |
+| Compare | FEQ.Q, FLT.Q, FLE.Q |
+| Classify | FCLASS.Q |
+| Precision Convert | FCVT.Q.S, FCVT.S.Q, FCVT.Q.D, FCVT.D.Q |
+
+### V Extension (Vector Operations)
+
+- Vector load/store operations
+- Vector integer operations
+- Vector floating-point operations
+- Vector configuration (vsetvli, vsetvl)
+- Support for various element widths (8/16/32/64/128/256/512/1024-bit)
+- Length multiplier (LMUL) support
+
+### C Extension (Compressed Instructions)
+
+16-bit compressed instructions for code size reduction:
+- C.ADDI4SPN, C.LW, C.LD, C.SW, C.SD
+- C.ADDI, C.JAL, C.LI, C.ADDI16SP, C.LUI
+- C.SRLI, C.SRAI, C.ANDI, C.SUB, C.XOR, C.OR, C.AND
+- C.J, C.BEQZ, C.BNEZ
+- And more...
+
+### Zicsr Extension (Control and Status Registers)
+
+| Instruction | Description |
+|-------------|-------------|
+| CSRRW | CSR Read/Write |
+| CSRRS | CSR Read/Set |
+| CSRRC | CSR Read/Clear |
+| CSRRWI | CSR Read/Write Immediate |
+| CSRRSI | CSR Read/Set Immediate |
+| CSRRCI | CSR Read/Clear Immediate |
+
+### Zifencei Extension (Instruction Fence)
+
+| Instruction | Description |
+|-------------|-------------|
+| FENCE.I | Instruction cache synchronization |
+
+### Zba/Zbb/Zbc Extensions (Bit Manipulation)
+
+| Category | Instructions |
+|----------|--------------|
+| Shift-Add | SH1ADD, SH2ADD, SH3ADD, SH1ADD.UW, SH2ADD.UW, SH3ADD.UW |
+| Rotate | ROL, ROR, RORI |
+| Logic | ANDN, ORN, XORN |
+| Count | CLZ, CTZ, CPOP |
+| Carry-less | CLMUL, CLMULR, CLMULH |
+| Min/Max | MIN, MAX, MINU, MAXU |
+| Bit Extract/Insert | BEXTI, BCLRI, BSETI, BINVI |
+| Special | ADD.UW, SLLI.UW |
 
 ### Pseudo-Instructions
 
@@ -51,19 +171,19 @@ beqz rs, label -> beq rs, x0, label
 ### Building
 
 ```bash
-git clone <repository-url>
-cd vm_project
+git clone https://github.com/olele114/riscv-128bit-vm.git
+cd riscv-128bit-vm
 cargo build --release
 ```
 
-The compiled executable will be located at `target/release/vm_project.exe`.
+The compiled executable will be located at `target/release/riscv-128bit-vm.exe`.
 
 ## Usage
 
 ### Command Line Arguments
 
 ```
-vm_project [options] [program_file]
+riscv-128bit-vm [options] [program_file]
 
 Options:
   --help              Show help message
@@ -85,22 +205,22 @@ Options:
 
 ```bash
 # Run a binary program
-vm_project program.bin
+riscv-128bit-vm program.bin
 
 # Run an assembly program
-vm_project program.s
+riscv-128bit-vm program.s
 
 # Run with specified load address
-vm_project --load-addr 0x80000000 firmware.asm
+riscv-128bit-vm --load-addr 0x80000000 firmware.asm
 
 # Run in debug mode
-vm_project --debug --trace program.s
+riscv-128bit-vm --debug --trace program.s
 
 # Single-step execution
-vm_project --step program.s
+riscv-128bit-vm --step program.s
 
 # Custom memory size (32MB)
-vm_project --memory 0x2000000 program.bin
+riscv-128bit-vm --memory 0x2000000 program.bin
 ```
 
 ## Assembly Language Examples
@@ -153,6 +273,44 @@ loop:
     
     addi t3, t2, 1     # t3 = t2 + 1
     
+    ebreak
+```
+
+### Floating-Point Example
+
+```asm
+# Floating-point computation
+.text
+
+    li t0, 0x1000      # Memory address for FP data
+    
+    # Store and load single-precision
+    flw f0, 0(t0)      # Load single-precision
+    fadd.s f2, f0, f1  # Add single-precision
+    
+    # Store and load double-precision
+    fld f4, 8(t0)      # Load double-precision
+    fmul.d f6, f4, f5  # Multiply double-precision
+    
+    ebreak
+```
+
+### Atomic Operations Example
+
+```asm
+# Atomic memory operations
+.text
+
+    li t0, 0x1000      # Memory address
+    
+    lr.d t1, 0(t0)     # Load reserved
+    addi t1, t1, 1     # Increment
+    sc.d t2, t1, 0(t0) # Store conditional
+    
+    beqz t2, done      # If success (t2 == 0), done
+    j atomic_retry     # Retry on failure
+    
+done:
     ebreak
 ```
 
@@ -214,15 +372,15 @@ while vm.is_running() && !vm.has_exception() {
 ## Project Structure
 
 ```
-vm_project/
+riscv-128bit-vm/
 ├── Cargo.toml
 └── src/
     ├── main.rs              # Main program entry
     └── riscv/
         ├── mod.rs           # Module exports
         ├── cpu.rs           # CPU implementation
-        ├── register.rs      # Register implementation
-        ├── memory.rs        # Memory implementation
+        ├── register.rs      # Register file (GPR, FPR, VR, CSR)
+        ├── memory.rs        # Memory system with AMO support
         ├── instruction.rs   # Instruction decoder
         ├── executor.rs      # Instruction executor
         ├── virtual_machine.rs # VM interface
@@ -230,6 +388,8 @@ vm_project/
 ```
 
 ## Register Mapping
+
+### General-Purpose Registers
 
 | Register | ABI Name | Purpose |
 |----------|----------|---------|
@@ -244,6 +404,22 @@ vm_project/
 | x10-x17 | a0-a7 | Function arguments / Return values |
 | x18-x27 | s2-s11 | Saved registers |
 | x28-x31 | t3-t6 | Temporary registers |
+
+### Floating-Point Registers
+
+| Register | ABI Name | Purpose |
+|----------|----------|---------|
+| f0-f7 | ft0-ft7 | FP temporary registers |
+| f8-f9 | fs0-fs1 | FP saved registers |
+| f10-f17 | fa0-fa7 | FP arguments / Return values |
+| f18-f27 | fs2-fs11 | FP saved registers |
+| f28-f31 | ft8-ft11 | FP temporary registers |
+
+### Vector Registers
+
+| Register | ABI Name | Purpose |
+|----------|----------|---------|
+| v0-v31 | v0-v31 | Vector registers |
 
 ## License
 
